@@ -1,0 +1,182 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import type { CalendarEvent } from "@/lib/types";
+import { EVENT_TYPES } from "@/lib/constants";
+import { upsertEvent } from "@/lib/actions/events";
+import {
+  Button,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Textarea,
+} from "@/components/ui";
+import {
+  dateKeyOf,
+  timeOf,
+  todayKey,
+  type ApplicationLite,
+  type ContactLite,
+} from "./calendar-utils";
+
+export function EventForm({
+  event,
+  defaultDate,
+  contacts,
+  applications,
+  onDone,
+}: {
+  event: CalendarEvent | null;
+  /** yyyy-mm-dd prefill when adding from a day cell. */
+  defaultDate?: string;
+  contacts: ContactLite[];
+  applications: ApplicationLite[];
+  onDone: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [allDay, setAllDay] = useState(event?.all_day ?? false);
+
+  const start = event ? new Date(event.start_at) : null;
+  const end = event?.end_at ? new Date(event.end_at) : null;
+  const defDate = start ? dateKeyOf(start) : (defaultDate ?? todayKey());
+  const defStartTime = start && !event?.all_day ? timeOf(start) : "";
+  const defEndTime = end && !event?.all_day ? timeOf(end) : "";
+
+  function submit(formData: FormData) {
+    const date = String(formData.get("date") ?? "");
+    if (!date) {
+      setError("Pick a date.");
+      return;
+    }
+    const startTime = String(formData.get("start_time") ?? "");
+    const endTime = String(formData.get("end_time") ?? "");
+    const useTimes = !allDay && startTime !== "";
+    if (useTimes && endTime && endTime <= startTime) {
+      setError("End time must be after the start time.");
+      return;
+    }
+    // Compose ISO timestamps in the user's local timezone.
+    formData.set(
+      "start_at",
+      new Date(`${date}T${useTimes ? startTime : "00:00"}`).toISOString()
+    );
+    formData.set(
+      "end_at",
+      useTimes && endTime ? new Date(`${date}T${endTime}`).toISOString() : ""
+    );
+
+    startTransition(async () => {
+      const res = await upsertEvent(formData);
+      if (res.error) setError(res.error);
+      else onDone();
+    });
+  }
+
+  return (
+    <form action={submit} className="space-y-4">
+      {event && <input type="hidden" name="id" value={event.id} />}
+      <input type="hidden" name="source" value={event?.source ?? "manual"} />
+
+      <Field label="Title *">
+        <Input
+          name="title"
+          defaultValue={event?.title}
+          required
+          autoFocus
+          placeholder="Coffee chat with an analyst, superday prep..."
+        />
+      </Field>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Event type">
+          <Select name="event_type" defaultValue={event?.event_type ?? "meeting"}>
+            {EVENT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Date *">
+          <Input name="date" type="date" defaultValue={defDate} required />
+        </Field>
+      </div>
+
+      <label className="flex w-fit cursor-pointer items-center gap-1.5 text-xs text-zinc-500">
+        <input
+          type="checkbox"
+          name="all_day"
+          checked={allDay}
+          onChange={(e) => setAllDay(e.target.checked)}
+          className="accent-brand-600"
+        />
+        All day
+      </label>
+
+      {!allDay && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Start time">
+            <Input name="start_time" type="time" defaultValue={defStartTime} />
+          </Field>
+          <Field label="End time">
+            <Input name="end_time" type="time" defaultValue={defEndTime} />
+          </Field>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Linked contact">
+          <Select name="contact_id" defaultValue={event?.contact_id ?? ""}>
+            <option value="">—</option>
+            {contacts.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.company ? ` — ${c.company}` : ""}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Linked application">
+          <Select name="application_id" defaultValue={event?.application_id ?? ""}>
+            <option value="">—</option>
+            {applications.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.company}
+                {a.position ? ` — ${a.position}` : ""}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      <Field label="Location">
+        <Input
+          name="location"
+          defaultValue={event?.location ?? ""}
+          placeholder="Zoom, campus café, firm HQ..."
+        />
+      </Field>
+
+      <Field label="Description">
+        <Textarea name="description" defaultValue={event?.description ?? ""} />
+      </Field>
+
+      {error && (
+        <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={pending}>
+          {pending ? <Spinner /> : event ? "Save changes" : "Add event"}
+        </Button>
+      </div>
+    </form>
+  );
+}
