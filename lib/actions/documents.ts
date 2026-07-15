@@ -72,7 +72,15 @@ export async function deleteDocument(id: string): Promise<ActionResult> {
   if (error) return { error: error.message };
 
   if (doc?.file_path) {
-    await supabase.storage.from("documents").remove([doc.file_path]);
+    const { error: removeError } = await supabase.storage
+      .from("documents")
+      .remove([doc.file_path]);
+    if (removeError) {
+      console.error(
+        `Failed to remove stored file ${doc.file_path}:`,
+        removeError.message
+      );
+    }
   }
 
   revalidatePath("/dashboard/documents");

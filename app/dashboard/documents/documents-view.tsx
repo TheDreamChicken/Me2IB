@@ -111,6 +111,7 @@ function DocumentForm({
   function submit(formData: FormData) {
     setError(null);
     startTransition(async () => {
+      let uploadedPath: string | null = null;
       if (!isEdit && mode === "upload") {
         const file = formData.get("file") as File | null;
         formData.delete("file"); // don't ship the binary to the server action
@@ -126,7 +127,13 @@ function DocumentForm({
           setError("Not logged in.");
           return;
         }
-        const path = `${user.id}/${Date.now()}-${file.name}`;
+        // Storage keys only allow a restricted character set — sanitize the
+        // original filename so uploads never fail on legal-but-exotic names.
+        const safeName = file.name
+          .normalize("NFKD")
+          .replace(/[^\w.\- ]+/g, "_")
+          .replace(/\s+/g, "_");
+        const path = `${user.id}/${Date.now()}-${safeName}`;
         const { error: uploadError } = await supabase.storage
           .from("documents")
           .upload(path, file);
@@ -134,12 +141,21 @@ function DocumentForm({
           setError(uploadError.message);
           return;
         }
+        uploadedPath = path;
         formData.set("file_path", path);
       }
 
       const res = await saveDocument(formData);
-      if (res.error) setError(res.error);
-      else onDone();
+      if (res.error) {
+        if (uploadedPath) {
+          // Best-effort cleanup so a failed save doesn't orphan the upload.
+          await createClient()
+            .storage.from("documents")
+            .remove([uploadedPath])
+            .catch(() => {});
+        }
+        setError(res.error);
+      } else onDone();
     });
   }
 
@@ -295,13 +311,15 @@ function DocumentDetail({
     const supabase = createClient();
     const { data, error: signError } = await supabase.storage
       .from("documents")
-      .createSignedUrl(doc.file_path, 60);
+      .createSignedUrl(doc.file_path, 60, { download: true });
     setDownloading(false);
     if (signError || !data?.signedUrl) {
       setError(signError?.message ?? "Could not create a download link.");
       return;
     }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    // Navigate (not window.open) — popups opened after an await get blocked
+    // in Safari; the download disposition keeps the user on this page.
+    window.location.href = data.signedUrl;
   }
 
   return (

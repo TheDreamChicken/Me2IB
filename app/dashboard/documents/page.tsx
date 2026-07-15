@@ -7,10 +7,12 @@ export const metadata: Metadata = { title: "Documents" };
 
 export default async function DocumentsPage() {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("documents")
     .select("*")
     .order("updated_at", { ascending: false });
+
+  if (error) throw new Error("Couldn't load documents: " + error.message);
 
   return <DocumentsView documents={(data ?? []) as Document[]} />;
 }
