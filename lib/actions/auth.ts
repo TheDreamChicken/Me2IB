@@ -27,7 +27,13 @@ export async function login(
   }
 
   revalidatePath("/", "layout");
-  redirect(next.startsWith("/") ? next : "/dashboard");
+  // Only allow same-origin paths: reject protocol-relative (//evil.com) and
+  // backslash (/\evil.com) forms that browsers treat as external URLs.
+  const safeNext =
+    next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")
+      ? next
+      : "/dashboard";
+  redirect(safeNext);
 }
 
 export async function signup(

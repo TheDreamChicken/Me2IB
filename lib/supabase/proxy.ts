@@ -40,14 +40,20 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    const res = NextResponse.redirect(url);
+    // Carry over any auth cookies staged by getUser() (token rotation) so
+    // the refreshed session isn't dropped on redirect.
+    supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c));
+    return res;
   }
 
   if (user && AUTH_PAGES.includes(path)) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
-    return NextResponse.redirect(url);
+    const res = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c));
+    return res;
   }
 
   return supabaseResponse;
