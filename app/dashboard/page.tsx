@@ -22,12 +22,15 @@ import type {
 } from "@/lib/types";
 import { APPLICATION_STATUSES, EVENT_TYPES, labelFor } from "@/lib/constants";
 import { daysSinceTouch, followupDelta, isOverdue } from "@/lib/contact-utils";
-import { Badge, Button, Card, PageHeader, StatCard } from "@/components/ui";
+import { Badge, Button, Card, StatCard } from "@/components/ui";
+import { LocalDate, LocalTime } from "@/components/local-date";
+import { DueBadge, TodayHeading } from "./overview-bits";
 
 export const metadata: Metadata = { title: "Overview" };
 
 /* ------------------------------------------------------------------ */
-/* Date helpers (server-side, deterministic per request)               */
+/* Date helpers — server clock, used only for coarse query bounds and  */
+/* filtering. User-visible labels render viewer-local via client bits. */
 /* ------------------------------------------------------------------ */
 
 const MS_DAY = 86_400_000;
@@ -43,29 +46,6 @@ function daysFromToday(date: string): number {
   const then = new Date(date + "T00:00:00").getTime();
   return Math.round((then - startOfToday()) / MS_DAY);
 }
-
-function dueLabel(days: number): string {
-  if (days <= 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  return `In ${days} days`;
-}
-
-function dueBadgeColor(days: number): string {
-  if (days <= 2) return "bg-rose-50 text-rose-600";
-  if (days <= 7) return "bg-amber-50 text-amber-600";
-  return "bg-brand-50 text-brand-600";
-}
-
-// One per weekday — deterministic, so the greeting stays stable all day.
-const SUBTITLES = [
-  "A quiet Sunday email beats a noisy Monday one. One small step today.",
-  "New week, new coffee chats. Let's make something happen.",
-  "Consistency beats intensity — one touchpoint today is plenty.",
-  "Halfway there. Keep the momentum going.",
-  "Every follow-up you send compounds. Keep going.",
-  "Finish the week strong — future you will say thanks.",
-  "Weekends are for prep. A little polish goes a long way.",
-];
 
 const INTERVIEW_STATUSES = new Set([
   "online_assessment",
@@ -149,18 +129,37 @@ export default async function DashboardOverviewPage() {
   // Layout already gates this route; defense in depth for TS + safety.
   if (!user) redirect("/login?next=/dashboard");
 
-  const eventsSince = new Date(Date.now() - MS_DAY).toISOString();
-  const [contactsRes, appsRes, eventsRes, profileRes] = await Promise.all([
-    supabase.from("contacts").select("*"),
-    supabase.from("applications").select("*"),
-    supabase
-      .from("events")
-      .select("*")
-      .gte("start_at", eventsSince)
-      .order("start_at", { ascending: true })
-      .limit(10),
-    supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
-  ]);
+  const nowMs = Date.now();
+  const [contactsRes, appsRes, eventsRes, weekCountRes, profileRes] =
+    await Promise.all([
+      supabase.from("contacts").select("*"),
+      supabase.from("applications").select("*"),
+      supabase
+        .from("events")
+        .select("*")
+        .gte("start_at", new Date(startOfToday()).toISOString())
+        .order("start_at", { ascending: true })
+        .limit(10),
+      supabase
+        .from("events")
+        .select("id", { count: "exact", head: true })
+        .gte("start_at", new Date(nowMs - MS_DAY).toISOString())
+        .lte("start_at", new Date(nowMs + 7 * MS_DAY).toISOString()),
+      supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
+    ]);
+
+  if (contactsRes.error)
+    throw new Error(`Couldn't load contacts: ${contactsRes.error.message}`);
+  if (appsRes.error)
+    throw new Error(`Couldn't load applications: ${appsRes.error.message}`);
+  if (eventsRes.error)
+    throw new Error(`Couldn't load events: ${eventsRes.error.message}`);
+  if (weekCountRes.error)
+    throw new Error(
+      `Couldn't count upcoming events: ${weekCountRes.error.message}`
+    );
+  if (profileRes.error)
+    throw new Error(`Couldn't load your profile: ${profileRes.error.message}`);
 
   const contacts = (contactsRes.data ?? []) as Contact[];
   const applications = (appsRes.data ?? []) as Application[];
@@ -174,12 +173,6 @@ export default async function DashboardOverviewPage() {
     "";
   const firstName =
     fullName.trim().split(/\s+/)[0] || user.email?.split("@")[0] || "there";
-  const todayLabel = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-  const subtitle = SUBTITLES[new Date().getDay()];
 
   /* ----- stats ----- */
   const activeContacts = contacts.filter((c) => c.status !== "archived");
@@ -189,11 +182,7 @@ export default async function DashboardOverviewPage() {
   const interviewCount = applications.filter((a) =>
     INTERVIEW_STATUSES.has(a.status)
   ).length;
-  const weekAhead = Date.now() + 7 * MS_DAY;
-  const upcomingWeekCount = events.filter((e) => {
-    const t = new Date(e.start_at).getTime();
-    return t >= startOfToday() && t <= weekAhead;
-  }).length;
+  const upcomingWeekCount = weekCountRes.count ?? 0;
 
   /* ----- needs attention ----- */
   const overdue = contacts
@@ -222,10 +211,7 @@ export default async function DashboardOverviewPage() {
 
   return (
     <div>
-      <PageHeader
-        title={`Welcome back, ${firstName}`}
-        description={`${todayLabel} — ${subtitle}`}
-      />
+      <TodayHeading firstName={firstName} />
 
       {/* Stats row */}
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -400,9 +386,7 @@ export default async function DashboardOverviewPage() {
                               {labelFor(APPLICATION_STATUSES, item.app.status)}
                             </p>
                           </div>
-                          <Badge className={dueBadgeColor(item.days)}>
-                            {dueLabel(item.days)}
-                          </Badge>
+                          <DueBadge dateStr={item.date} />
                         </Link>
                       </li>
                     ))}
@@ -432,7 +416,6 @@ export default async function DashboardOverviewPage() {
                     const type = EVENT_TYPES.find(
                       (t) => t.value === e.event_type
                     );
-                    const start = new Date(e.start_at);
                     return (
                       <li key={e.id}>
                         <Link
@@ -441,19 +424,21 @@ export default async function DashboardOverviewPage() {
                         >
                           <div className="w-24 shrink-0 sm:w-28">
                             <p className="text-sm font-medium text-brand-900">
-                              {start.toLocaleDateString("en-US", {
-                                weekday: "short",
-                                month: "short",
-                                day: "numeric",
-                              })}
+                              <LocalDate
+                                iso={e.start_at}
+                                options={{
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                }}
+                              />
                             </p>
                             <p className="text-xs text-zinc-400">
-                              {e.all_day
-                                ? "All day"
-                                : start.toLocaleTimeString("en-US", {
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                  })}
+                              {e.all_day ? (
+                                "All day"
+                              ) : (
+                                <LocalTime iso={e.start_at} />
+                              )}
                             </p>
                           </div>
                           <Badge className={type?.color}>
