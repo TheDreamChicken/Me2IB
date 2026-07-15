@@ -22,6 +22,7 @@ import {
   labelFor,
 } from "@/lib/constants";
 import { daysSinceTouch, followupDelta, isOverdue } from "@/lib/contact-utils";
+import { localDateKey, useNow } from "@/components/use-today";
 import {
   deleteContact,
   markContacted,
@@ -100,9 +101,19 @@ function StrengthDots({ value }: { value: number }) {
   );
 }
 
-function TouchBadge({ contact }: { contact: Contact }) {
+function TouchBadge({ contact, now }: { contact: Contact; now: Date | null }) {
   if (contact.status === "archived") {
     return <Badge className="bg-zinc-100 text-zinc-500">Archived</Badge>;
+  }
+  // Day counts depend on the viewer's clock/timezone — render a neutral
+  // placeholder until mounted so SSR HTML never disagrees with the client.
+  if (!now) {
+    return (
+      <Badge className="bg-zinc-100 text-zinc-400">
+        <AlarmClock className="h-3 w-3" />
+        &hellip;
+      </Badge>
+    );
   }
   const delta = followupDelta(contact);
   const days = daysSinceTouch(contact);
@@ -287,14 +298,17 @@ function ContactForm({
 
 function ContactDetail({
   contact,
+  now,
   onEdit,
   onClose,
 }: {
   contact: Contact;
+  now: Date | null;
   onEdit: () => void;
   onClose: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const logo = companyLogoUrl(contact.company);
 
   const infoRows: { icon: React.ElementType; label: string; value: string | null }[] = [
@@ -324,7 +338,7 @@ function ContactDetail({
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StrengthDots value={contact.connection_strength} />
-            <TouchBadge contact={contact} />
+            <TouchBadge contact={contact} now={now} />
             {contact.industry && (
               <Badge>{labelFor(INDUSTRIES, contact.industry)}</Badge>
             )}
@@ -358,13 +372,23 @@ function ContactDetail({
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
-              await markContacted(contact.id);
+              const res = await markContacted(
+                contact.id,
+                localDateKey(new Date())
+              );
+              setError(res.error ?? null);
             })
           }
         >
           {pending ? <Spinner /> : "I reached out today"}
         </Button>
       </div>
+
+      {error && (
+        <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
 
       {/* Info grid */}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -408,8 +432,9 @@ function ContactDetail({
         <DeleteButton
           onConfirm={() => {
             startTransition(async () => {
-              await deleteContact(contact.id);
-              onClose();
+              const res = await deleteContact(contact.id);
+              if (res.error) setError(res.error);
+              else onClose();
             });
           }}
         />
@@ -424,6 +449,7 @@ function ContactDetail({
 /* ------------------------------------------------------------------ */
 
 export function ContactsView({ contacts }: { contacts: Contact[] }) {
+  const now = useNow();
   const [query, setQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
   const [sort, setSort] = useState<"recent" | "name" | "stale">("recent");
@@ -477,8 +503,14 @@ export function ContactsView({ contacts }: { contacts: Contact[] }) {
         />
         <StatCard
           label="Overdue follow-ups"
-          value={overdueCount}
-          sub={overdueCount ? "Don't let them go cold!" : "All caught up 🎉"}
+          value={now ? overdueCount : "—"}
+          sub={
+            now
+              ? overdueCount
+                ? "Don't let them go cold!"
+                : "All caught up 🎉"
+              : undefined
+          }
           icon={<AlarmClock className="h-5 w-5" />}
         />
         <StatCard
@@ -570,7 +602,7 @@ export function ContactsView({ contacts }: { contacts: Contact[] }) {
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <StrengthDots value={c.connection_strength} />
-                      <TouchBadge contact={c} />
+                      <TouchBadge contact={c} now={now} />
                     </div>
                   </div>
                 </div>
@@ -607,6 +639,7 @@ export function ContactsView({ contacts }: { contacts: Contact[] }) {
         {selected && (
           <ContactDetail
             contact={selected}
+            now={now}
             onClose={() => setSelectedId(null)}
             onEdit={() => setEditing(selected)}
           />

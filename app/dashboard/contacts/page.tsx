@@ -7,10 +7,12 @@ export const metadata: Metadata = { title: "Contacts" };
 
 export default async function ContactsPage() {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("contacts")
     .select("*")
     .order("created_at", { ascending: false });
+
+  if (error) throw new Error("Couldn't load contacts: " + error.message);
 
   return <ContactsView contacts={(data ?? []) as Contact[]} />;
 }
