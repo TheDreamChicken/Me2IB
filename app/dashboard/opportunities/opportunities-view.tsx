@@ -22,7 +22,9 @@ import {
   deleteOpportunity,
   setOpportunityStatus,
   upsertOpportunity,
+  type ActionResult,
 } from "@/lib/actions/opportunities";
+import { daysUntilLocal, useNow } from "@/components/use-today";
 import {
   Badge,
   Button,
@@ -91,13 +93,6 @@ const HUNTING_SPOTS = [
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-function daysUntil(dateStr: string): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(`${dateStr}T00:00:00`);
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
-}
-
 function formatDate(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00`).toLocaleDateString("en-US", {
     month: "short",
@@ -115,7 +110,18 @@ function statusBadge(status: string) {
 }
 
 function DeadlineBadge({ deadline }: { deadline: string }) {
-  const days = daysUntil(deadline);
+  // Hydration-safe: neutral date-only badge until mounted, then urgency
+  // from the viewer's clock.
+  const now = useNow();
+  if (!now) {
+    return (
+      <Badge className="bg-zinc-100 text-zinc-600">
+        <CalendarClock className="h-3 w-3" />
+        {formatDate(deadline)}
+      </Badge>
+    );
+  }
+  const days = daysUntilLocal(deadline, now);
   const urgent = days < 7;
   return (
     <Badge
@@ -296,9 +302,11 @@ function OpportunityForm({
           {opportunity && (
             <DeleteButton
               onConfirm={() => {
+                setError(null);
                 startTransition(async () => {
-                  await deleteOpportunity(opportunity.id);
-                  onDone();
+                  const res = await deleteOpportunity(opportunity.id);
+                  if (res.error) setError(res.error);
+                  else onDone();
                 });
               }}
             />
@@ -330,12 +338,15 @@ function OpportunityCard({
 }) {
   const [pending, startTransition] = useTransition();
   const [acting, setActing] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const logo = companyLogoUrl(o.company);
 
-  function run(action: string, fn: () => Promise<unknown>) {
+  function run(action: string, fn: () => Promise<ActionResult>) {
     setActing(action);
+    setError(null);
     startTransition(async () => {
-      await fn();
+      const res = await fn();
+      if (res.error) setError(res.error);
       setActing(null);
     });
   }
@@ -460,6 +471,12 @@ function OpportunityCard({
             <Pencil className="h-3.5 w-3.5" />
           </button>
       </div>
+
+      {error && (
+        <p className="mt-2.5 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
     </Card>
   );
 }

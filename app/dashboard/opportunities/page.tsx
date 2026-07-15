@@ -7,10 +7,14 @@ export const metadata: Metadata = { title: "Opportunities" };
 
 export default async function OpportunitiesPage() {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("opportunities")
     .select("*")
     .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error("Couldn't load opportunities: " + error.message);
+  }
 
   return <OpportunitiesView opportunities={(data ?? []) as Opportunity[]} />;
 }

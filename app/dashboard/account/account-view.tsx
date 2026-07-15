@@ -368,6 +368,9 @@ export function AccountView({
                         month: "long",
                         day: "numeric",
                         year: "numeric",
+                        // Date-only display: pin to UTC so server and every
+                        // viewer timezone render the same day.
+                        timeZone: "UTC",
                       })
                     : "—"}
                 </p>

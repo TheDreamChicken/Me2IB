@@ -13,6 +13,7 @@ import {
 import type { Profile } from "@/lib/types";
 import { INDUSTRIES, STANDINGS, labelFor } from "@/lib/constants";
 import { savePlanProfile } from "@/lib/actions/plan-profile";
+import { useNow } from "@/components/use-today";
 import {
   Badge,
   Button,
@@ -30,13 +31,22 @@ import { MONTH_NAMES, PHASE_STEPS, computeTimeline } from "./timeline-logic";
 /* Profile form                                                        */
 /* ------------------------------------------------------------------ */
 
-function PlanProfileForm({ profile }: { profile: Profile | null }) {
+function PlanProfileForm({
+  profile,
+  now,
+}: {
+  profile: Profile | null;
+  now: Date | null;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 7 }, (_, i) => currentYear + i);
+  // Hydration-safe year options: before mount (now === null) only render the
+  // saved grad year, then expand to the full list from the browser's clock.
+  const years: number[] = now
+    ? Array.from({ length: 7 }, (_, i) => now.getFullYear() + i)
+    : [];
   if (profile?.grad_year && !years.includes(profile.grad_year)) {
     years.unshift(profile.grad_year);
   }
@@ -211,10 +221,12 @@ function WhereYouStand({
   profile,
   contactsCount,
   applicationsCount,
+  now,
 }: {
   profile: Profile | null;
   contactsCount: number;
   applicationsCount: number;
+  now: Date;
 }) {
   const industry = profile?.target_industries?.[0] ?? null;
   const ready = Boolean(profile?.grad_year && profile?.grad_month && industry);
@@ -242,6 +254,7 @@ function WhereYouStand({
     industry: industry!,
     contactsCount,
     applicationsCount,
+    now,
   });
 
   const stats = [
@@ -460,6 +473,9 @@ export function PlanView({
   contactsCount: number;
   applicationsCount: number;
 }) {
+  // Hydration-safe clock: null during SSR/first render, then the browser's.
+  const now = useNow();
+
   return (
     <div>
       <PageHeader
@@ -468,12 +484,19 @@ export function PlanView({
       />
 
       <div className="space-y-6">
-        <PlanProfileForm profile={profile} />
-        <WhereYouStand
-          profile={profile}
-          contactsCount={contactsCount}
-          applicationsCount={applicationsCount}
-        />
+        <PlanProfileForm profile={profile} now={now} />
+        {now ? (
+          <WhereYouStand
+            profile={profile}
+            contactsCount={contactsCount}
+            applicationsCount={applicationsCount}
+            now={now}
+          />
+        ) : (
+          <Card className="flex items-center justify-center p-8">
+            <Spinner />
+          </Card>
+        )}
         <AiPlanPlaceholder />
         <Roadmap101 />
       </div>

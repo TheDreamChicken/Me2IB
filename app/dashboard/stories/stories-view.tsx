@@ -228,7 +228,8 @@ function StoryDetail({
   onEdit: () => void;
   onClose: () => void;
 }) {
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <div className="space-y-5">
@@ -276,15 +277,29 @@ function StoryDetail({
         </div>
       )}
 
+      {error && (
+        <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
+
       <div className="flex items-center justify-between border-t border-brand-100 pt-4">
-        <DeleteButton
-          onConfirm={() => {
-            startTransition(async () => {
-              await deleteStory(story.id);
-              onClose();
-            });
-          }}
-        />
+        {pending ? (
+          <Button variant="danger" size="sm" disabled>
+            <Spinner />
+          </Button>
+        ) : (
+          <DeleteButton
+            onConfirm={() => {
+              setError(null);
+              startTransition(async () => {
+                const res = await deleteStory(story.id);
+                if (res.error) setError(res.error);
+                else onClose();
+              });
+            }}
+          />
+        )}
         <Button onClick={onEdit}>Edit story</Button>
       </div>
     </div>

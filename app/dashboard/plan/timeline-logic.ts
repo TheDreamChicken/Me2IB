@@ -101,7 +101,10 @@ export function computeTimeline(input: TimelineInput): Timeline {
   const monthsUntilGrad = gradIdx - nowIdx;
 
   // Junior summer — the internship summer that feeds full-time offers.
-  const targetSummerYear = input.gradYear - 1;
+  // Spring grads' last summer is the year before graduation; fall/winter
+  // (e.g. December) grads still have the summer of their graduation year.
+  const targetSummerYear =
+    input.gradMonth <= 6 ? input.gradYear - 1 : input.gradYear;
   const S = targetSummerYear;
 
   const resolvedStanding =

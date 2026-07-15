@@ -239,7 +239,8 @@ function ExperienceCard({
   experience: Experience;
   onEdit: () => void;
 }) {
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const bullets = parseBullets(experience.bullets);
   const range = dateRange(experience);
 
@@ -282,15 +283,29 @@ function ExperienceCard({
           <Button size="sm" variant="secondary" onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" /> Edit
           </Button>
-          <DeleteButton
-            onConfirm={() =>
-              startTransition(async () => {
-                await deleteExperience(experience.id);
-              })
-            }
-          />
+          {pending ? (
+            <Button size="sm" variant="danger" disabled>
+              <Spinner />
+            </Button>
+          ) : (
+            <DeleteButton
+              onConfirm={() => {
+                setError(null);
+                startTransition(async () => {
+                  const res = await deleteExperience(experience.id);
+                  if (res.error) setError(res.error);
+                });
+              }}
+            />
+          )}
         </div>
       </div>
+
+      {error && (
+        <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
 
       {experience.description && (
         <p className="mt-3 text-sm leading-relaxed text-zinc-600">

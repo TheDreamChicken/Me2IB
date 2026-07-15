@@ -14,6 +14,18 @@ export default async function PlanPage() {
     supabase.from("applications").select("*", { count: "exact", head: true }),
   ]);
 
+  if (profileRes.error) {
+    throw new Error("Couldn't load your profile: " + profileRes.error.message);
+  }
+  if (contactsRes.error) {
+    throw new Error("Couldn't load contacts: " + contactsRes.error.message);
+  }
+  if (applicationsRes.error) {
+    throw new Error(
+      "Couldn't load applications: " + applicationsRes.error.message
+    );
+  }
+
   return (
     <PlanView
       profile={(profileRes.data ?? null) as Profile | null}

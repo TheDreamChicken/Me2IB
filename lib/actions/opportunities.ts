@@ -136,6 +136,10 @@ export async function addToTracker(id: string): Promise<ActionResult> {
   if (fetchError || !data) return { error: "Opportunity not found." };
   const opportunity = data as Opportunity;
 
+  // Idempotent: already in the tracker (e.g. a double-click) — don't insert
+  // a second application.
+  if (opportunity.status === "added_to_tracker") return { ok: true };
+
   const notes =
     [
       opportunity.notes,

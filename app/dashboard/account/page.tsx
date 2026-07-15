@@ -11,7 +11,14 @@ export default async function AccountPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data } = await supabase.from("profiles").select("*").maybeSingle();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Couldn't load your profile: " + error.message);
+  }
 
   return (
     <AccountView
