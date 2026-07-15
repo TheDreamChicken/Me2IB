@@ -15,6 +15,13 @@ export default async function ApplicationsPage() {
     supabase.from("contacts").select("*").order("name", { ascending: true }),
   ]);
 
+  if (appsRes.error) {
+    throw new Error("Couldn't load applications: " + appsRes.error.message);
+  }
+  if (contactsRes.error) {
+    throw new Error("Couldn't load contacts: " + contactsRes.error.message);
+  }
+
   return (
     <ApplicationsView
       applications={(appsRes.data ?? []) as Application[]}

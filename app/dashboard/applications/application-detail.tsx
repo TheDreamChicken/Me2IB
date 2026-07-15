@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   ArrowRight,
   Banknote,
@@ -30,6 +30,7 @@ import {
   setApplicationStatus,
 } from "@/lib/actions/applications";
 import { Badge, Button, DeleteButton, Select, Spinner, cn } from "@/components/ui";
+import { useNow } from "@/components/use-today";
 import {
   CompanyLogo,
   PriorityBadge,
@@ -189,6 +190,8 @@ export function ApplicationDetail({
   onClose: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const now = useNow();
 
   const referral = app.referral_contact_id
     ? (contacts.find((c) => c.id === app.referral_contact_id) ?? null)
@@ -201,8 +204,10 @@ export function ApplicationDetail({
       : null;
 
   function changeStatus(status: string) {
+    setError(null);
     startTransition(async () => {
-      await setApplicationStatus(app.id, status);
+      const res = await setApplicationStatus(app.id, status);
+      if (res.error) setError(res.error);
     });
   }
 
@@ -307,7 +312,9 @@ export function ApplicationDetail({
               label="Deadline"
               value={formatDate(app.deadline)}
               valueClassName={
-                deadlineUrgent(app) ? "font-semibold text-rose-600" : undefined
+                deadlineUrgent(app, now)
+                  ? "font-semibold text-rose-600"
+                  : undefined
               }
             />
           )}
@@ -444,11 +451,22 @@ export function ApplicationDetail({
         </Section>
       )}
 
+      {error && (
+        <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
+
       <div className="flex items-center justify-between border-t border-brand-100 pt-4">
         <DeleteButton
           onConfirm={() => {
+            setError(null);
             startTransition(async () => {
-              await deleteApplication(app.id);
+              const res = await deleteApplication(app.id);
+              if (res.error) {
+                setError(res.error);
+                return;
+              }
               onClose();
             });
           }}

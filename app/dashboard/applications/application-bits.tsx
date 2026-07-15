@@ -10,6 +10,7 @@ import {
   statusColor,
 } from "@/lib/constants";
 import { Badge, cn } from "@/components/ui";
+import { daysUntilLocal, useNow } from "@/components/use-today";
 
 /* ------------------------------------------------------------------ */
 /* Status helpers                                                      */
@@ -46,18 +47,23 @@ export function formatDate(date: string | null | undefined): string {
   });
 }
 
-export function daysUntil(date: string | null): number | null {
-  if (!date) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(`${date.slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(target.getTime())) return null;
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
+/**
+ * Days until a deadline, hydration-safe: pass `now` from useNow(). Returns
+ * null (neutral) when `now` is null (SSR / pre-mount) or the date is invalid.
+ */
+export function daysUntil(
+  date: string | null,
+  now: Date | null
+): number | null {
+  if (!date || !now) return null;
+  const key = date.slice(0, 10);
+  if (Number.isNaN(new Date(`${key}T00:00:00`).getTime())) return null;
+  return daysUntilLocal(key, now);
 }
 
 /** Red-alert deadline: within 7 days (or past) and not submitted yet. */
-export function deadlineUrgent(app: Application): boolean {
-  const days = daysUntil(app.deadline);
+export function deadlineUrgent(app: Application, now: Date | null): boolean {
+  const days = daysUntil(app.deadline, now);
   return days !== null && days <= 7 && !isSubmitted(app);
 }
 
@@ -107,9 +113,12 @@ export function PriorityBadge({ priority }: { priority: string }) {
 }
 
 export function DeadlineChip({ app }: { app: Application }) {
+  const now = useNow();
   if (!app.deadline) return null;
-  const urgent = deadlineUrgent(app);
-  const days = daysUntil(app.deadline);
+  // Until mounted (now === null) days is null and urgent is false, so the
+  // chip renders as a neutral formatted date — no SSR/client mismatch.
+  const urgent = deadlineUrgent(app, now);
+  const days = daysUntil(app.deadline, now);
   return (
     <span
       className={cn(

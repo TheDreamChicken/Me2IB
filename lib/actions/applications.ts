@@ -27,6 +27,17 @@ export async function upsertApplication(
   const company = str(formData, "company");
   if (!company) return { error: "Company is required." };
 
+  const referralContactId = str(formData, "referral_contact_id");
+  if (referralContactId) {
+    const { data: contact } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("id", referralContactId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!contact) return { error: "Invalid referral contact." };
+  }
+
   const payload = {
     company,
     position: str(formData, "position"),
@@ -45,7 +56,7 @@ export async function upsertApplication(
     date_applied: str(formData, "date_applied"),
     application_link: str(formData, "application_link"),
     posting_link: str(formData, "posting_link"),
-    referral_contact_id: str(formData, "referral_contact_id"),
+    referral_contact_id: referralContactId,
     networked: formData.get("networked") === "on",
     resume_status: str(formData, "resume_status") ?? "not_started",
     cover_letter_status: str(formData, "cover_letter_status") ?? "not_required",
