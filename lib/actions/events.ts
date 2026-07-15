@@ -42,6 +42,27 @@ export async function upsertEvent(formData: FormData): Promise<ActionResult> {
     source: str(formData, "source") ?? "manual",
   };
 
+  // FK constraints don't go through RLS, so verify the caller actually owns
+  // any linked contact/application before writing the reference.
+  if (payload.contact_id) {
+    const { data: contact } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("id", payload.contact_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!contact) return { error: "Invalid linked record." };
+  }
+  if (payload.application_id) {
+    const { data: application } = await supabase
+      .from("applications")
+      .select("id")
+      .eq("id", payload.application_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!application) return { error: "Invalid linked record." };
+  }
+
   const id = str(formData, "id");
   const { error } = id
     ? await supabase

@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CalendarEvent } from "@/lib/types";
 import { Button, Card, cn } from "@/components/ui";
-import { buildMonthCells, todayKey, typeColor } from "./calendar-utils";
+import { localDateKey, useNow } from "@/components/use-today";
+import { buildMonthCells, typeColor } from "./calendar-utils";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MAX_PILLS = 3;
@@ -29,7 +30,9 @@ export function MonthGrid({
     () => buildMonthCells(cursor.year, cursor.month),
     [cursor]
   );
-  const today = todayKey();
+  // Hydration-safe: null during SSR/first render, so no today-ring until mounted.
+  const now = useNow();
+  const today = now ? localDateKey(now) : null;
   const monthLabel = new Date(cursor.year, cursor.month, 1).toLocaleDateString(
     "en-US",
     { month: "long", year: "numeric" }

@@ -51,6 +51,9 @@ export function dateKeyOf(d: Date): string {
 
 /** Local day an event falls on. */
 export function eventDayKey(e: CalendarEvent): string {
+  // All-day events are stored at UTC midnight; read the date straight off the
+  // ISO string so every timezone buckets them onto the same calendar day.
+  if (e.all_day) return e.start_at.slice(0, 10);
   return dateKeyOf(new Date(e.start_at));
 }
 

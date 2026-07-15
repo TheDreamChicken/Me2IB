@@ -13,6 +13,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import {
+  addDaysKey,
   dateKeyOf,
   timeOf,
   todayKey,
@@ -40,7 +41,12 @@ export function EventForm({
 
   const start = event ? new Date(event.start_at) : null;
   const end = event?.end_at ? new Date(event.end_at) : null;
-  const defDate = start ? dateKeyOf(start) : (defaultDate ?? todayKey());
+  // All-day events live at UTC midnight — read the date off the ISO string.
+  const defDate = event
+    ? event.all_day
+      ? event.start_at.slice(0, 10)
+      : dateKeyOf(new Date(event.start_at))
+    : (defaultDate ?? todayKey());
   const defStartTime = start && !event?.all_day ? timeOf(start) : "";
   const defEndTime = end && !event?.all_day ? timeOf(end) : "";
 
@@ -53,19 +59,26 @@ export function EventForm({
     const startTime = String(formData.get("start_time") ?? "");
     const endTime = String(formData.get("end_time") ?? "");
     const useTimes = !allDay && startTime !== "";
-    if (useTimes && endTime && endTime <= startTime) {
-      setError("End time must be after the start time.");
-      return;
+    if (allDay) {
+      // All-day events are stored at UTC midnight so every timezone sees
+      // them on the same calendar day.
+      formData.set("start_at", new Date(`${date}T00:00:00Z`).toISOString());
+      formData.set("end_at", "");
+    } else {
+      // Compose ISO timestamps in the user's local timezone.
+      formData.set(
+        "start_at",
+        new Date(`${date}T${useTimes ? startTime : "00:00"}`).toISOString()
+      );
+      // An end time at or before the start time means the event runs
+      // overnight — roll the end over to the next day.
+      const endDate =
+        useTimes && endTime && endTime <= startTime ? addDaysKey(date, 1) : date;
+      formData.set(
+        "end_at",
+        useTimes && endTime ? new Date(`${endDate}T${endTime}`).toISOString() : ""
+      );
     }
-    // Compose ISO timestamps in the user's local timezone.
-    formData.set(
-      "start_at",
-      new Date(`${date}T${useTimes ? startTime : "00:00"}`).toISOString()
-    );
-    formData.set(
-      "end_at",
-      useTimes && endTime ? new Date(`${date}T${endTime}`).toISOString() : ""
-    );
 
     startTransition(async () => {
       const res = await upsertEvent(formData);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Briefcase, CheckCircle2, Clock, MapPin, Users } from "lucide-react";
 import type { CalendarEvent } from "@/lib/types";
 import { EVENT_TYPES, labelFor } from "@/lib/constants";
@@ -29,6 +29,7 @@ export function EventDetail({
   onClose: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const dateLabel = formatDayKey(eventDayKey(event), {
     weekday: "long",
@@ -110,12 +111,19 @@ export function EventDetail({
         </div>
       )}
 
+      {error && (
+        <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-brand-100 pt-4">
         <DeleteButton
           onConfirm={() => {
             startTransition(async () => {
-              await deleteEvent(event.id);
-              onClose();
+              const res = await deleteEvent(event.id);
+              if (res.error) setError(res.error);
+              else onClose();
             });
           }}
         />
@@ -125,7 +133,12 @@ export function EventDetail({
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                await toggleEventComplete(event.id, !event.completed);
+                const res = await toggleEventComplete(
+                  event.id,
+                  !event.completed
+                );
+                if (res.error) setError(res.error);
+                else setError(null);
               })
             }
           >

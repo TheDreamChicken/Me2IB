@@ -14,6 +14,7 @@ import {
   StatCard,
   cn,
 } from "@/components/ui";
+import { localDateKey, useNow } from "@/components/use-today";
 import {
   addDaysKey,
   buildSuggestions,
@@ -40,6 +41,7 @@ function EventRow({
   contact,
   application,
   showDate = true,
+  today,
   toggling,
   onOpen,
   onToggle,
@@ -48,13 +50,15 @@ function EventRow({
   contact: ContactLite | null;
   application: ApplicationLite | null;
   showDate?: boolean;
+  /** Hydration-safe local day key; null until mounted (neutral label). */
+  today?: string | null;
   toggling: boolean;
   onOpen: () => void;
   onToggle: () => void;
 }) {
   const meta = [
     showDate
-      ? eventDayKey(event) === todayKey()
+      ? today && eventDayKey(event) === today
         ? "Today"
         : formatDayKey(eventDayKey(event))
       : null,
@@ -88,7 +92,9 @@ function EventRow({
         >
           {event.title}
         </p>
-        <p className="mt-0.5 truncate text-xs text-zinc-400">{meta}</p>
+        <p suppressHydrationWarning className="mt-0.5 truncate text-xs text-zinc-400">
+          {meta}
+        </p>
       </div>
       <Badge className={cn("shrink-0", typeColor(event.event_type))}>
         {labelFor(EVENT_TYPES, event.event_type)}
@@ -115,8 +121,13 @@ export function CalendarView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dayKey, setDayKey] = useState<string | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Hydration-safe clock: null during SSR + first client render.
+  const now = useNow();
+  const today = now ? localDateKey(now) : null;
 
   // Keep the detail modal in sync with fresh server data after actions.
   const selected = events.find((e) => e.id === selectedId) ?? null;
@@ -142,24 +153,25 @@ export function CalendarView({
   }, [events]);
 
   const upcoming = useMemo(() => {
-    const start = todayKey();
-    const end = addDaysKey(start, 14);
+    if (!today) return [];
+    const end = addDaysKey(today, 14);
     return events.filter((e) => {
       const k = eventDayKey(e);
-      return k >= start && k < end;
+      return k >= today && k < end;
     });
-  }, [events]);
+  }, [events, today]);
 
   const suggestions = useMemo(
-    () => buildSuggestions(events, contacts, applications),
-    [events, contacts, applications]
+    () => (now ? buildSuggestions(events, contacts, applications) : []),
+    [now, events, contacts, applications]
   );
 
-  const now = new Date();
-  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const thisMonthCount = events.filter((e) =>
-    eventDayKey(e).startsWith(monthPrefix)
-  ).length;
+  const monthPrefix = now
+    ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+    : null;
+  const thisMonthCount = monthPrefix
+    ? events.filter((e) => eventDayKey(e).startsWith(monthPrefix)).length
+    : 0;
   const openUpcoming = upcoming.filter((e) => !e.completed).length;
 
   function contactFor(e: CalendarEvent) {
@@ -181,16 +193,19 @@ export function CalendarView({
 
   function addSuggestion(s: Suggestion) {
     setPendingKey(s.key);
+    setSuggestError(null);
     startTransition(async () => {
       const fd = new FormData();
       fd.set("title", s.title);
       fd.set("event_type", s.event_type);
-      fd.set("start_at", new Date(`${s.date}T00:00:00`).toISOString());
+      // All-day events are stored at UTC midnight of the suggested day.
+      fd.set("start_at", new Date(`${s.date}T00:00:00Z`).toISOString());
       fd.set("all_day", "true");
       fd.set("source", "smart");
       if (s.contact_id) fd.set("contact_id", s.contact_id);
       if (s.application_id) fd.set("application_id", s.application_id);
-      await upsertEvent(fd);
+      const res = await upsertEvent(fd);
+      if (res.error) setSuggestError(res.error);
       setPendingKey(null);
     });
   }
@@ -216,13 +231,13 @@ export function CalendarView({
         <StatCard
           label="Next 14 days"
           value={openUpcoming}
-          sub={openUpcoming ? "Still to do" : "Clear runway ahead"}
+          sub={!now ? undefined : openUpcoming ? "Still to do" : "Clear runway ahead"}
           icon={<Clock className="h-5 w-5" />}
         />
         <StatCard
           label="Smart suggestions"
           value={suggestions.length}
-          sub={suggestions.length ? "Waiting for a slot" : "All caught up 🎉"}
+          sub={!now ? undefined : suggestions.length ? "Waiting for a slot" : "All caught up 🎉"}
           icon={<Lightbulb className="h-5 w-5" />}
         />
       </div>
@@ -242,11 +257,13 @@ export function CalendarView({
               <h2 className="text-sm font-semibold text-brand-900">
                 Upcoming — next 14 days
               </h2>
-              <span className="text-xs text-zinc-400">
+              <span suppressHydrationWarning className="text-xs text-zinc-400">
                 {upcoming.length} event{upcoming.length === 1 ? "" : "s"}
               </span>
             </div>
             {upcoming.length === 0 ? (
+              // Until mounted we don't know the viewer's "today" — stay neutral.
+              now && (
               <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-brand-200 bg-brand-50/50 p-6 text-center">
                 <CalendarDays className="h-8 w-8 text-brand-300" />
                 <p className="text-sm font-medium text-brand-900">
@@ -260,6 +277,7 @@ export function CalendarView({
                   <Plus className="h-4 w-4" /> Add event
                 </Button>
               </div>
+              )
             ) : (
               <div className="space-y-2">
                 {upcoming.map((e) => (
@@ -268,6 +286,7 @@ export function CalendarView({
                     event={e}
                     contact={contactFor(e)}
                     application={applicationFor(e)}
+                    today={today}
                     toggling={togglingId === e.id}
                     onOpen={() => setSelectedId(e.id)}
                     onToggle={() => toggle(e)}
@@ -280,11 +299,18 @@ export function CalendarView({
 
         {/* Right: smart suggestions + AI placeholder */}
         <div className="space-y-6">
-          <SuggestionsPanel
-            suggestions={suggestions}
-            pendingKey={pendingKey}
-            onAdd={addSuggestion}
-          />
+          <div className="space-y-2">
+            <SuggestionsPanel
+              suggestions={suggestions}
+              pendingKey={pendingKey}
+              onAdd={addSuggestion}
+            />
+            {suggestError && (
+              <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+                {suggestError}
+              </p>
+            )}
+          </div>
           <AiEventsPlaceholder />
         </div>
       </div>
