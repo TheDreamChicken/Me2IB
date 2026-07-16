@@ -81,7 +81,7 @@ export function SettingsView() {
           <div>
             <h2 className="font-semibold text-brand-900">Theme</h2>
             <p className="text-sm text-zinc-500">
-              Picks apply instantly and stick on this device.
+              Selections apply instantly and stick on this device.
             </p>
           </div>
         </div>

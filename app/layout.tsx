@@ -30,6 +30,9 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The theme script below stamps data-theme before hydration; React
+      // shouldn't warn about that attribute differing from the server HTML.
+      suppressHydrationWarning
     >
       <body className="min-h-screen flex flex-col">
         {/* Apply the saved theme before paint to avoid a flash of the default */}

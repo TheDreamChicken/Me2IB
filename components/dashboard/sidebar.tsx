@@ -43,7 +43,7 @@ const NAV_SECTIONS: {
     ],
   },
   {
-    heading: "Level up",
+    heading: "Fundamentals",
     items: [
       { href: "/dashboard/plan", label: "My Plan", icon: Map },
       { href: "/dashboard/documents", label: "Documents", icon: FileText },
@@ -194,7 +194,7 @@ export function Sidebar({
             me2<span className="text-brand-500">IB</span>
           </Link>
           <p className="mt-0.5 text-[11px] text-zinc-400">
-            keep track of the chaos
+            track the chaos
           </p>
         </div>
         <NavLinks />
