@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Palette } from "lucide-react";
+import { Check, GraduationCap, Palette } from "lucide-react";
 import { Card, PageHeader, cn } from "@/components/ui";
+import { useLearningPref, type PrefKey } from "@/components/learning-prefs";
 
 // Ordered as light/dark pairs — each light theme has a darker sibling.
 const THEMES = [
@@ -120,6 +121,99 @@ export function SettingsView() {
           })}
         </div>
       </Card>
+
+      <Card className="mt-6 p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
+            <GraduationCap className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-brand-900">Learning depth</h2>
+            <p className="text-sm text-zinc-500">
+              How deep explanations go by default in Practice — mix and match
+              however your brain likes it.
+            </p>
+          </div>
+        </div>
+
+        <div className="divide-y divide-brand-100">
+          <DepthRow
+            prefKey="terms"
+            title="Key term pop-ups"
+            description="The little blurbs that appear when you hover a finance or consulting term."
+            offLabel="Simple"
+            onLabel="Detailed"
+          />
+          <DepthRow
+            prefKey="worked"
+            title="Worked examples"
+            description="Which version opens first inside practice answers."
+            offLabel="Keep it simple"
+            onLabel="The real deal"
+          />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function DepthRow({
+  prefKey,
+  title,
+  description,
+  offLabel,
+  onLabel,
+}: {
+  prefKey: PrefKey;
+  title: string;
+  description: string;
+  offLabel: string;
+  onLabel: string;
+}) {
+  const [depth, setDepth] = useLearningPref(prefKey);
+  const detailed = depth === "detailed";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0">
+      <div className="min-w-0">
+        <p className="font-medium text-brand-900">{title}</p>
+        <p className="mt-0.5 text-xs text-zinc-500">{description}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2.5">
+        <span
+          className={cn(
+            "text-xs font-medium transition-colors",
+            detailed ? "text-zinc-400" : "text-brand-800"
+          )}
+        >
+          {offLabel}
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={detailed}
+          aria-label={`${title}: ${detailed ? onLabel : offLabel}`}
+          onClick={() => setDepth(detailed ? "simple" : "detailed")}
+          className={cn(
+            "relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors",
+            detailed ? "bg-brand-600" : "bg-brand-200"
+          )}
+        >
+          <span
+            className={cn(
+              "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+              detailed && "translate-x-5"
+            )}
+          />
+        </button>
+        <span
+          className={cn(
+            "text-xs font-medium transition-colors",
+            detailed ? "text-brand-800" : "text-zinc-400"
+          )}
+        >
+          {onLabel}
+        </span>
+      </div>
     </div>
   );
 }

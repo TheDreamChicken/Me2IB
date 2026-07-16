@@ -7,10 +7,12 @@
 import { useState } from "react";
 import { ChevronDown, FlaskConical } from "lucide-react";
 import { Card, cn } from "@/components/ui";
+import { useLearningPref } from "@/components/learning-prefs";
+import { GlossaryText } from "./term-hover";
 import type { ContentBlock, PracticeItem, WorkedExample } from "./content";
 
 /* ------------------------------------------------------------------ */
-/* Inline **bold** rendering                                           */
+/* Inline **bold** rendering (+ hoverable glossary terms)              */
 /* ------------------------------------------------------------------ */
 
 export function Inline({ text }: { text: string }) {
@@ -20,10 +22,12 @@ export function Inline({ text }: { text: string }) {
       {parts.map((part, i) =>
         i % 2 === 1 ? (
           <strong key={i} className="font-semibold text-brand-900">
-            {part}
+            <GlossaryText text={part} />
           </strong>
         ) : (
-          <span key={i}>{part}</span>
+          <span key={i}>
+            <GlossaryText text={part} />
+          </span>
         )
       )}
     </>
@@ -136,7 +140,12 @@ type ExampleVersion = (typeof EXAMPLE_VERSIONS)[number]["value"];
 
 function WorkedExampleToggle({ example }: { example: WorkedExample }) {
   const [open, setOpen] = useState(false);
-  const [version, setVersion] = useState<ExampleVersion>("simple");
+  // Default flavor follows the "worked" learning preference until the user
+  // picks a version by hand in this instance.
+  const [workedPref] = useLearningPref("worked");
+  const [override, setOverride] = useState<ExampleVersion | null>(null);
+  const version = override ?? (workedPref === "detailed" ? "real" : "simple");
+  const setVersion = (v: ExampleVersion) => setOverride(v);
   return (
     <div className="mt-4">
       <button

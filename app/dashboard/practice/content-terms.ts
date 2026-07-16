@@ -257,4 +257,67 @@ export const KEY_TERMS: KeyTerm[] = [
       trap: "In an M&A context the words flip meaning: a \"sell-side process\" just means the bank represents the seller. Context matters.",
     },
   },
+  {
+    term: "EBIT",
+    plain:
+      "Operating income — profit from running the business, before interest and taxes take their cut.",
+    deeper: {
+      detail:
+        "Revenue − COGS − operating expenses (including D&A). It's EBITDA minus depreciation & amortization, which is why asset-heavy companies show a much bigger gap between the two.",
+      why: "It captures operating performance while still charging the business for wearing out its assets — many argue EV/EBIT is a fairer multiple than EV/EBITDA for capital-intensive companies.",
+      trap: "\"Walk from EBIT to unlevered free cash flow\": EBIT × (1 − tax rate) + D&A − CapEx − change in working capital. Interviewers love this bridge.",
+    },
+  },
+  {
+    term: "Terminal Value",
+    plain:
+      "The chunk of a DCF that captures everything after your projection window — usually most of the total.",
+    deeper: {
+      detail:
+        "Two methods: Gordon growth (final-year FCF × (1+g) ÷ (WACC − g), with g around 2–3%) or an exit multiple (final-year EBITDA × a comps-based multiple). Both get discounted back to today.",
+      why: "It typically carries 60–80% of a DCF's value, so tiny changes in the growth rate or exit multiple swing the whole answer.",
+      trap: "Using a growth rate above the economy's long-run growth — the company would eventually BE the economy. Interviewers check whether your g makes sense.",
+    },
+  },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Hover-glossary aliases                                              */
+/* ------------------------------------------------------------------ */
+
+// Phrases that light up as hoverable wherever they appear in Practice
+// content, mapped to the KEY_TERMS entry that explains them. Overlapping
+// phrases are resolved longest-first by the matcher.
+export const TERM_ALIASES: Record<string, string[]> = {
+  EBITDA: ["EBITDA"],
+  EBIT: ["EBIT", "operating income"],
+  "Enterprise Value": ["enterprise value", "EV"],
+  "Equity Value": ["equity value", "market cap", "market capitalization"],
+  WACC: ["WACC", "cost of capital", "discount rate"],
+  DCF: ["DCF", "DCFs", "discounted cash flow"],
+  LBO: ["LBO", "LBOs", "leveraged buyout"],
+  "Accretion / Dilution": ["accretion/dilution", "accretive", "dilutive"],
+  "Multiples (EV/EBITDA, P/E)": ["EV/EBITDA", "P/E", "multiples"],
+  "Working Capital": ["working capital", "NWC"],
+  CapEx: ["capex", "capital expenditures", "capital expenditure"],
+  "Free Cash Flow": [
+    "unlevered free cash flows",
+    "unlevered free cash flow",
+    "free cash flows",
+    "free cash flow",
+    "UFCF",
+    "FCF",
+  ],
+  CAGR: ["CAGR"],
+  Synergies: ["synergies", "synergy"],
+  "Due Diligence": ["due diligence"],
+  "Net Debt": ["net debt"],
+  IRR: ["IRR"],
+  Leverage: ["leverage", "levered", "unlevered"],
+  Comps: ["comps", "comparable companies", "trading comps"],
+  IPO: ["IPO", "IPOs"],
+  "Bulge Bracket": ["bulge bracket", "bulge-bracket"],
+  MBB: ["MBB"],
+  "Sell-Side vs Buy-Side": ["sell-side", "buy-side", "sell side", "buy side"],
+  "Terminal Value": ["terminal value"],
+};
