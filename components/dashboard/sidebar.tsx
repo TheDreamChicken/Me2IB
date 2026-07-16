@@ -57,7 +57,7 @@ const NAV_SECTIONS: {
     heading: "More",
     items: [
       { href: "/dashboard/chat", label: "AI Chat", icon: MessagesSquare },
-      { href: "/faq", label: "Recruiting FAQ", icon: MessageCircleQuestion },
+      { href: "/dashboard/faq", label: "Recruiting FAQ", icon: MessageCircleQuestion },
       { href: "/dashboard/settings", label: "Settings", icon: Settings },
       { href: "/dashboard/account", label: "Account", icon: CircleUserRound },
     ],
