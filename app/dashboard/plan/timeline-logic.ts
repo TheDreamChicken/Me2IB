@@ -4,7 +4,7 @@
 // All date math uses a "month index" = year * 12 + (month - 1), so plain
 // subtraction gives months apart.
 
-import { INDUSTRIES, labelFor } from "@/lib/constants";
+import { INDUSTRIES, STANDINGS, labelFor } from "@/lib/constants";
 
 export const MONTH_NAMES = [
   "January",
@@ -47,8 +47,8 @@ function monthLabel(monthIdx: number): string {
 }
 
 /**
- * "Standard student (figure it out for me)": derive the actual standing from
- * how far away graduation is (assumes a 4-year track).
+ * No standing picked? Derive it from how far away graduation is
+ * (assumes a 4-year track).
  */
 export function deriveStanding(
   gradYear: number,
@@ -107,10 +107,13 @@ export function computeTimeline(input: TimelineInput): Timeline {
     input.gradMonth <= 6 ? input.gradYear - 1 : input.gradYear;
   const S = targetSummerYear;
 
+  // Unset — or a value we no longer recognize (e.g. the retired "standard"
+  // option still stored on old profile rows) — falls back to deriving the
+  // standing from the grad date.
   const resolvedStanding =
-    !input.standing || input.standing === "standard"
-      ? deriveStanding(input.gradYear, input.gradMonth, now)
-      : input.standing;
+    input.standing && STANDINGS.some((s) => s.value === input.standing)
+      ? input.standing
+      : deriveStanding(input.gradYear, input.gradMonth, now);
 
   const industryLabel = labelFor(INDUSTRIES, input.industry);
 
@@ -126,13 +129,15 @@ export function computeTimeline(input: TimelineInput): Timeline {
     appsOpen = idx(S - 1, 1);
     appsClose = idx(S - 1, 6);
     interviewsEnd = idx(S - 1, 10);
-    cycleNote = `Finance recruits earlier than any other industry. Applications for summer ${S} internships open roughly ${monthLabel(appsOpen)}–${monthLabel(appsClose)} — that's sophomore spring, a full 18–24 months before the internship starts. Interviews (HireVues, first rounds, superdays) roll on from there through about ${monthLabel(interviewsEnd)}, and firms review on a rolling basis — early applicants win.`;
+    cycleNote = `Finance recruits brutally early. Applications for summer ${S} internships open roughly ${monthLabel(appsOpen)}–${monthLabel(appsClose)} — that's sophomore spring, a full 18–24 months before the internship starts. Interviews (HireVues, first rounds, superdays) roll on from there through about ${monthLabel(interviewsEnd)}, and firms review on a rolling basis — early applicants win.`;
   } else if (input.industry === "consulting") {
-    // Apps ~summer/fall of junior year for the next summer.
-    appsOpen = idx(S - 1, 6);
-    appsClose = idx(S - 1, 11);
-    interviewsEnd = idx(S, 2);
-    cycleNote = `Consulting applications for summer ${S} run roughly ${monthLabel(appsOpen)}–${monthLabel(appsClose)} — the summer before junior year through junior fall. Case interviews follow through about ${monthLabel(interviewsEnd)}. Less extreme than finance, but MBB deadlines are firm — know your school's exact dates.`;
+    // Consulting has moved way up and now essentially matches banking:
+    // apps for junior summer open Jan–Jun of SOPHOMORE year (sophomore
+    // spring), with interviews and decisions rolling through junior fall.
+    appsOpen = idx(S - 1, 1);
+    appsClose = idx(S - 1, 6);
+    interviewsEnd = idx(S - 1, 11);
+    cycleNote = `Consulting now recruits on banking's clock. Applications for summer ${S} internships — MBB especially — open roughly ${monthLabel(appsOpen)}–${monthLabel(appsClose)}, the spring of sophomore year, with interviews and decisions rolling through about ${monthLabel(interviewsEnd)}. MBB deadlines are firm, and sophomore/diversity programs open even earlier — know your school's exact dates.`;
   } else {
     // Other industries: fall/winter of junior-senior year, more just-in-time.
     appsOpen = idx(S - 1, 9);

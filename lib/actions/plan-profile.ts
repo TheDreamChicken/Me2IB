@@ -29,26 +29,22 @@ export async function savePlanProfile(
   const school = str(formData, "school");
   const gradMonth = num(formData, "grad_month");
   const gradYear = num(formData, "grad_year");
-  const standing = str(formData, "standing");
+  const standingRaw = str(formData, "standing");
   const industry = str(formData, "target_industry");
+
+  // The "standard" standing option was retired. If it somehow arrives (stale
+  // tab, old client), store it as unset — the timeline derives standing from
+  // the grad date whenever it's null, so nothing goes stale.
+  const standing = standingRaw === "standard" ? null : standingRaw;
 
   if (gradMonth !== null && (gradMonth < 1 || gradMonth > 12)) {
     return { error: "Graduation month must be between 1 and 12." };
   }
 
-  // "Standard student (figure it out for me)" is stored as-is; the timeline
-  // derives the effective standing from the grad date at render time, so it
-  // never goes stale. It just needs a grad date to derive from.
-  if (standing === "standard" && (!gradYear || !gradMonth)) {
-    return {
-      error:
-        "Pick a graduation month and year so we can figure out your standing.",
-    };
-  }
-
   // The Account page manages target_industries as a multi-select; this form
-  // only picks the primary one. Merge instead of overwriting: put the chosen
-  // industry first and keep the rest.
+  // only picks the primary one. Merge instead of overwriting — and the chosen
+  // industry MUST go first: the Plan form and the timeline both read
+  // target_industries[0] as the primary industry.
   let targetIndustries: string[] | undefined;
   if (industry) {
     const { data: existing, error: readError } = await supabase

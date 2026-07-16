@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   CalendarClock,
   CheckCircle2,
@@ -42,6 +42,22 @@ function PlanProfileForm({
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
 
+  // The industry select is CONTROLLED and re-synced from the server whenever
+  // a save round-trips. Why: React 19 auto-resets uncontrolled form fields
+  // after a <form action> completes, and for a <select> the reset snaps back
+  // to the option selected at *mount time* (React never re-applies a changed
+  // `defaultValue` to a mounted select). Controlled state sidesteps that.
+  const savedIndustry = profile?.target_industries?.[0] ?? "";
+  const [industry, setIndustry] = useState(savedIndustry);
+  useEffect(() => setIndustry(savedIndustry), [savedIndustry]);
+
+  // Old profile rows may still hold the retired "standard" value (or other
+  // junk) — treat anything we don't recognize as unset.
+  const savedStanding =
+    profile?.standing && STANDINGS.some((s) => s.value === profile.standing)
+      ? profile.standing
+      : "";
+
   // Hydration-safe year options: before mount (now === null) only render the
   // saved grad year, then expand to the full list from the browser's clock.
   const years: number[] = now
@@ -78,7 +94,14 @@ function PlanProfileForm({
         </div>
       </div>
 
-      <form action={submit} className="space-y-4">
+      {/* Keyed on updated_at: after a successful save the revalidated profile
+          arrives with a new timestamp, remounting the form so every
+          uncontrolled field re-seeds from what's actually stored. */}
+      <form
+        key={profile ? profile.updated_at : "new"}
+        action={submit}
+        className="space-y-4"
+      >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="School">
             <Input
@@ -121,9 +144,10 @@ function PlanProfileForm({
           </Field>
           <Field
             label="Standing"
-            hint='Not sure? Pick "Standard student" and we’ll work it out from your grad date.'
+            hint="Not sure? Leave it — we’ll work it out from your grad date."
           >
-            <Select name="standing" defaultValue={profile?.standing ?? "standard"}>
+            <Select name="standing" defaultValue={savedStanding}>
+              <option value="">Not sure — figure it out for me</option>
               {STANDINGS.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
@@ -134,7 +158,8 @@ function PlanProfileForm({
           <Field label="Target industry *">
             <Select
               name="target_industry"
-              defaultValue={profile?.target_industries?.[0] ?? ""}
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
               required
             >
               <option value="" disabled>
@@ -363,20 +388,20 @@ const ROADMAP: {
   {
     badge: "Year 2 · Spring",
     title: "Sophomore spring",
-    tagline: "Go time for finance",
+    tagline: "Go time — banking AND consulting",
     bullets: [
       "IB applications for junior summer open January–June — yes, a year and a half early. Apply as soon as they open; review is rolling.",
+      "Consulting now runs on the same clock: MBB applications for junior summer open this spring too, and sophomore/diversity programs open even earlier. If consulting's your lane, you should already be casing.",
       "Turn your best relationships into referrals — a referral means an employee formally recommends you, which can move your resume to the top of the pile.",
-      "Get technicals interview-ready: HireVues (recorded video interviews) and first rounds arrive fast after you apply.",
-      "Keep networking at your target firms — chats with analysts there are what referrals grow out of.",
+      "Get interview-ready before you submit: HireVues (recorded video interviews) and first rounds arrive fast — technicals for banking, live cases for consulting.",
     ],
   },
   {
     badge: "Year 3",
     title: "Junior fall & summer",
-    tagline: "Consulting season and everything else",
+    tagline: "Decisions, late waves, and everything else",
     bullets: [
-      "Consulting apps (MBB and friends) run summer through fall for the following summer — practice live cases with a partner, not just books.",
+      "Banking and consulting decisions roll through junior fall — superdays, final case rounds, and late waves at firms still filling seats. No offer yet? Keep applying; spots open up every year.",
       "Marketing, tech, and ops recruit fall/winter, more just-in-time — watch OCR (on-campus recruiting: your school's career portal, fairs, and info sessions).",
       "If you landed a junior-summer internship, treat it like a 10-week interview — it's the single best path to a full-time offer.",
       "Build your behavioral story bank: leadership, teamwork, failure, and “why this industry.”",
@@ -480,7 +505,7 @@ export function PlanView({
     <div>
       <PageHeader
         title="My Plan"
-        description="Tell us where you are; we'll show you where you're going. Recruiting timelines are brutal — but only if they surprise you."
+        description="Tell us where you are and we'll map out the rest — what's coming, when it hits, and what's actually worth doing this week. Timelines are only scary when they sneak up on you."
       />
 
       <div className="space-y-6">

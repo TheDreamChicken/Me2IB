@@ -74,7 +74,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
           },
           {
             kind: "p",
-            text: "Also honest: “early” matters most in finance and somewhat in consulting. Marketing, operations, corporate roles, and most of tech hire on saner timelines — junior fall and winter for the following summer. Don't let finance-timeline panic infect every other path.",
+            text: "Also honest: “early” matters most in finance and consulting — the two now run on essentially the same sophomore-spring clock, with MBB sophomore and diversity programs opening even earlier. Marketing, operations, corporate roles, and most of tech hire on saner timelines — junior fall and winter for the following summer. Don't let banking-timeline panic infect every other path.",
           },
         ],
       },
@@ -162,7 +162,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
         answer: [
           {
             kind: "p",
-            text: "Consulting runs roughly six months to a year behind banking, and it's a bit saner. For MBB junior-summer internships, applications typically open in the spring of sophomore year with deadlines in early summer, and interviews run late sophomore summer into junior fall. Tier 2 firms and Big 4 consulting mostly recruit in **junior fall** for the following summer.",
+            text: "Consulting used to be the laid-back sibling that recruited a year behind banking. Not anymore — it has crept earlier every cycle and now essentially **matches the banking timeline**. For MBB junior-summer internships, applications and serious networking open in the **spring of sophomore year** (a sophomore graduating in 2029 applies in spring 2027 for Summer 2028), with interviews and decisions rolling through junior fall. MBB sophomore programs and diversity programs open even earlier — sophomore fall or before. Tier 2 firms and Big 4 consulting still skew later, often junior fall, but don't bet your summer on it.",
           },
           {
             kind: "p",
@@ -384,6 +384,24 @@ export const FAQ_SECTIONS: FaqSection[] = [
           {
             kind: "p",
             text: "Two reasons these punch above their weight. Interviewers remember them — you become “the kid with the deals blog” instead of resume #40. And they're a networking cheat code: a coffee chat where you can say “I wrote something about the deal your group just closed” is a different conversation from “I'm hoping to learn more about the industry.”",
+          },
+        ],
+      },
+      {
+        id: "campus-resume-interests",
+        question: "Do the “interests” on my resume actually matter?",
+        answer: [
+          {
+            kind: "p",
+            text: "Yes — genuinely, and more than almost anyone believes. After a superday, interviewers rarely remember your GPA; they remember that you're **the national-park collector** or the person who makes a mean carbonara. Interests are the easiest conversation starter in any interview or coffee chat, and they're quiet evidence that you're an actual human someone would want on their team at 1am — which, at the margin, is what offers come down to.",
+          },
+          {
+            kind: "p",
+            text: "The bar: keep **one or two real, specific interests** and cut the safe corporate filler. “Traveling, fitness, reading” says nothing — everyone technically likes those. “Visited 24 national parks and counting,” “club volleyball,” or “makes a mean carbonara” starts a conversation. Specific beats impressive: nobody cares whether it's fancy, they care whether they can ask you about it.",
+          },
+          {
+            kind: "p",
+            text: "Two rules: it has to be true (you *will* get asked, occasionally by someone who knows more about it than you), and you should be able to talk about it with real enthusiasm for two minutes. That's the whole cost — one resume line that's often the only part anyone smiles at.",
           },
         ],
       },
@@ -731,7 +749,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
         answer: [
           {
             kind: "p",
-            text: "The months when everyone coffee-chats ahead of applications opening — roughly sophomore fall through early spring for finance. Chats still work outside the season; it's just when the volume peaks.",
+            text: "The months when everyone coffee-chats ahead of applications opening — roughly sophomore fall through early spring, now for both finance and consulting. Chats still work outside the season; it's just when the volume peaks.",
           },
         ],
       },
