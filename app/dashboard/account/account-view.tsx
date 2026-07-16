@@ -6,17 +6,21 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleUserRound,
+  Crown,
   GraduationCap,
   Heart,
   LogOut,
   Mail,
+  Plus,
   Sparkles,
+  X,
 } from "lucide-react";
 import type { Profile } from "@/lib/types";
-import { INDUSTRIES, STANDINGS } from "@/lib/constants";
+import { INDUSTRIES, STANDINGS, TIER_LEVELS } from "@/lib/constants";
 import { updateProfile } from "@/lib/actions/profile";
 import { signout } from "@/lib/actions/auth";
 import {
+  Badge,
   Button,
   Card,
   Field,
@@ -93,6 +97,68 @@ function IndustryChip({
   );
 }
 
+/**
+ * Dynamic list of inputs submitted as repeated form fields (getAll on the
+ * server). Not wrapped in <Field> — multiple inputs inside one <label> is
+ * invalid HTML.
+ */
+function ListField({
+  label,
+  name,
+  values,
+  onChange,
+  placeholder,
+  addLabel,
+}: {
+  label: string;
+  name: string;
+  values: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+  addLabel: string;
+}) {
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-medium text-brand-900/70">
+        {label}
+      </span>
+      <div className="space-y-2">
+        {values.map((value, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Input
+              name={name}
+              value={value}
+              placeholder={i === 0 ? placeholder : "Another one…"}
+              aria-label={`${label} ${i + 1}`}
+              onChange={(e) =>
+                onChange(values.map((v, j) => (j === i ? e.target.value : v)))
+              }
+              className="flex-1"
+            />
+            <button
+              type="button"
+              aria-label={`Remove ${label.toLowerCase()} ${i + 1}`}
+              onClick={() => onChange(values.filter((_, j) => j !== i))}
+              className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-500"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => onChange([...values, ""])}
+        className="mt-1.5"
+      >
+        <Plus className="h-3.5 w-3.5" /> {addLabel}
+      </Button>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Main view                                                           */
 /* ------------------------------------------------------------------ */
@@ -110,11 +176,41 @@ export function AccountView({
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
 
+  // Dynamic study lists — prefill from the array columns, fall back to the
+  // legacy single major/minor columns for older profiles.
+  const [majors, setMajors] = useState<string[]>(() =>
+    profile?.majors?.length
+      ? profile.majors
+      : profile?.major
+        ? [profile.major]
+        : [""]
+  );
+  const [minors, setMinors] = useState<string[]>(() =>
+    profile?.minors?.length
+      ? profile.minors
+      : profile?.minor
+        ? [profile.minor]
+        : []
+  );
+  const [certificates, setCertificates] = useState<string[]>(
+    () => profile?.certificates ?? []
+  );
+
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 7 }, (_, i) => currentYear + i);
   if (profile?.grad_year && !years.includes(profile.grad_year)) {
     years.unshift(profile.grad_year);
   }
+
+  // Older profiles may have stored things like "3.8 / 4.0" — pull out the
+  // first number for the input so re-saving doesn't trip validation.
+  const gpaDefault = profile?.gpa
+    ? (String(profile.gpa).match(/\d+(\.\d+)?/)?.[0] ?? "")
+    : "";
+
+  const tier =
+    TIER_LEVELS.find((t) => t.value === (profile?.tier ?? "free")) ??
+    TIER_LEVELS[0];
 
   function submit(formData: FormData) {
     setError(null);
@@ -133,7 +229,7 @@ export function AccountView({
     <div>
       <PageHeader
         title="Account"
-        description="Who you are on paper — the plan, your materials, and future AI features all pull from here."
+        description="This is you, on paper. Your plan, your materials, and the future AI features all pull from here — fill in what you've got, come back for the rest."
       />
 
       <form action={submit} className="space-y-4">
@@ -142,7 +238,7 @@ export function AccountView({
           <SectionHeader
             icon={GraduationCap}
             title="Basics"
-            sub="The essentials recruiters (and this app) care about."
+            sub="The quick facts — name, school, timeline. Nothing scary."
           />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Full name">
@@ -159,19 +255,15 @@ export function AccountView({
                 defaultValue={profile?.school ?? ""}
               />
             </Field>
-            <Field label="Major">
-              <Input
-                name="major"
-                placeholder="e.g. Economics"
-                defaultValue={profile?.major ?? ""}
-              />
-            </Field>
-            <Field label="Minor">
-              <Input
-                name="minor"
-                placeholder="e.g. Computer Science"
-                defaultValue={profile?.minor ?? ""}
-              />
+            <Field label="Standing">
+              <Select name="standing" defaultValue={profile?.standing ?? ""}>
+                <option value="">Where are you at?</option>
+                {STANDINGS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="Graduation month">
               <Select
@@ -199,29 +291,21 @@ export function AccountView({
                 ))}
               </Select>
             </Field>
-            <Field
-              label="Standing"
-              hint={'Not sure? Pick "Standard student" and we\'ll work it out.'}
-            >
-              <Select
-                name="standing"
-                defaultValue={profile?.standing ?? "standard"}
-              >
-                {STANDINGS.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </Select>
+            <Field label="GPA" hint="We'll tidy it to two decimals for you.">
+              <div className="flex items-center gap-2">
+                <Input
+                  name="gpa"
+                  placeholder="3.87"
+                  inputMode="decimal"
+                  defaultValue={gpaDefault}
+                  className="flex-1"
+                />
+                <span className="shrink-0 text-sm font-medium text-zinc-400">
+                  / 4.00
+                </span>
+              </div>
             </Field>
-            <Field label="GPA">
-              <Input
-                name="gpa"
-                placeholder="e.g. 3.8 / 4.0"
-                defaultValue={profile?.gpa ?? ""}
-              />
-            </Field>
-            <Field label="City">
+            <Field label="Location">
               <Input
                 name="city"
                 placeholder="e.g. Ann Arbor, MI"
@@ -243,6 +327,34 @@ export function AccountView({
               />
             </Field>
           </div>
+
+          {/* What you're studying — dynamic lists, double majors welcome */}
+          <div className="mt-5 grid gap-4 border-t border-brand-100 pt-5 sm:grid-cols-2 lg:grid-cols-3">
+            <ListField
+              label="Majors"
+              name="majors"
+              values={majors}
+              onChange={setMajors}
+              placeholder="e.g. Economics"
+              addLabel="add another major"
+            />
+            <ListField
+              label="Minors"
+              name="minors"
+              values={minors}
+              onChange={setMinors}
+              placeholder="e.g. Computer Science"
+              addLabel="add a minor"
+            />
+            <ListField
+              label="Certificates"
+              name="certificates"
+              values={certificates}
+              onChange={setCertificates}
+              placeholder="e.g. Financial Economics"
+              addLabel="add a certificate"
+            />
+          </div>
         </Card>
 
         {/* ------------------------- Professional -------------------------- */}
@@ -250,7 +362,7 @@ export function AccountView({
           <SectionHeader
             icon={Briefcase}
             title="Professional"
-            sub="What you're aiming for and what you've done so far."
+            sub="Where you're headed and what you've been up to so far."
           />
           <div className="space-y-4">
             {/* Not a <Field>: chips are labels themselves; nesting labels is invalid */}
@@ -271,19 +383,25 @@ export function AccountView({
                 ))}
               </div>
               <span className="mt-1 block text-xs text-zinc-400">
-                Pick all that you&apos;re recruiting for.
+                Pick all that you&apos;re recruiting for — you can always change
+                your mind.
               </span>
             </div>
-            <Field label="Clubs & activities">
+            <Field
+              label="Clubs & activities"
+              hint="One per line — add your role if you have one."
+            >
               <Textarea
                 name="clubs"
-                placeholder="Finance club (analyst), club tennis, student government..."
+                placeholder={
+                  "Finance club — analyst\nClub tennis\nStudent government"
+                }
                 defaultValue={profile?.clubs ?? ""}
               />
             </Field>
             <Field
               label="Professional summary"
-              hint="A short blurb about your experience — think elevator pitch."
+              hint="A short blurb about your experience — think elevator pitch, not autobiography."
             >
               <Textarea
                 name="professional_summary"
@@ -299,23 +417,27 @@ export function AccountView({
           <SectionHeader
             icon={Heart}
             title="Personal attributes"
-            sub="Shared interests are the easiest way to connect — future AI outreach suggestions will use these to find common ground with your contacts."
+            sub="Please don't make these all corporate. Pickup soccer, sourdough, chess hustling — the random human stuff is what interviewers actually remember and connect with. It's what makes you you."
           />
           <div className="space-y-4">
             <Field
               label="Personal interests"
-              hint="Hobbies, sports, hometown, favorite teams — anything you'd chat about."
+              hint="One per line — short and punchy."
             >
               <Textarea
                 name="personal_interests"
-                placeholder="Tennis, skiing, from Chicago, huge Bears fan, love cooking..."
+                placeholder={
+                  "Pickup soccer\nSourdough baking\nDie-hard Bears fan"
+                }
                 defaultValue={profile?.personal_interests ?? ""}
               />
             </Field>
-            <Field label="Fun facts">
+            <Field label="Fun facts" hint="One per line — the weirder the better.">
               <Textarea
                 name="fun_facts"
-                placeholder="Backpacked through 6 countries, once met Warren Buffett, can solve a Rubik's cube..."
+                placeholder={
+                  "Backpacked through 6 countries\nOnce met Warren Buffett\nCan solve a Rubik's cube"
+                }
                 defaultValue={profile?.fun_facts ?? ""}
               />
             </Field>
@@ -340,13 +462,30 @@ export function AccountView({
         </div>
       </form>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        {/* --------------------------- Your plan --------------------------- */}
+        <Card className="p-5 sm:p-6">
+          <SectionHeader
+            icon={Crown}
+            title="Your plan"
+            sub="No paywalls around here (yet)."
+          />
+          <div className="space-y-3">
+            <Badge className={tier.color}>{tier.label}</Badge>
+            <p className="text-sm text-zinc-500">
+              {tier.value === "free"
+                ? "Free — everything's included right now. Paid tiers come later; early birds will be treated kindly."
+                : `You're on ${tier.label} — everything's unlocked. Thanks for backing us early.`}
+            </p>
+          </div>
+        </Card>
+
         {/* ---------------------------- Account ---------------------------- */}
         <Card className="p-5 sm:p-6">
           <SectionHeader
             icon={CircleUserRound}
             title="Account"
-            sub="Your login details."
+            sub="Your login stuff."
           />
           <div className="space-y-3">
             <div className="flex items-start gap-2.5">
