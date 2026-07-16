@@ -6,159 +6,28 @@ import {
   ArrowRight,
   BookOpenText,
   Briefcase,
-  ChevronDown,
+  Calculator,
+  KeyRound,
   Landmark,
   MessageSquareText,
+  MonitorPlay,
   Sparkles,
 } from "lucide-react";
 import { Button, Card, PageHeader, cn } from "@/components/ui";
-import {
-  PRACTICE_TABS,
-  type ContentBlock,
-  type PracticeItem,
-  type PracticeTabValue,
-} from "./content";
+import { PRACTICE_TABS, QA_TABS, type PracticeTabValue } from "./content";
+import { ONLINE_ITEMS } from "./content-online";
+import { Accordion } from "./blocks";
+import { KeyTermsTab } from "./key-terms";
+import { MathGymTab } from "./math-gym";
 
 const TAB_ICONS: Record<PracticeTabValue, React.ElementType> = {
   finance: Landmark,
   consulting: Briefcase,
   behavioral: MessageSquareText,
+  terms: KeyRound,
+  mathgym: Calculator,
+  online: MonitorPlay,
 };
-
-/* ------------------------------------------------------------------ */
-/* Inline **bold** rendering                                           */
-/* ------------------------------------------------------------------ */
-
-function Inline({ text }: { text: string }) {
-  const parts = text.split("**");
-  return (
-    <>
-      {parts.map((part, i) =>
-        i % 2 === 1 ? (
-          <strong key={i} className="font-semibold text-brand-900">
-            {part}
-          </strong>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
-  );
-}
-
-function Blocks({ blocks }: { blocks: ContentBlock[] }) {
-  return (
-    <div className="space-y-3">
-      {blocks.map((block, i) => {
-        if (block.type === "p") {
-          return (
-            <p key={i} className="text-sm leading-relaxed text-zinc-600">
-              <Inline text={block.text} />
-            </p>
-          );
-        }
-        if (block.type === "list") {
-          return (
-            <ul key={i} className="space-y-2">
-              {block.items.map((item, j) => (
-                <li key={j} className="flex items-start gap-2.5">
-                  <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-brand-300" />
-                  <span className="text-sm leading-relaxed text-zinc-600">
-                    <Inline text={item} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          );
-        }
-        if (block.type === "steps") {
-          return (
-            <ol key={i} className="space-y-2">
-              {block.items.map((item, j) => (
-                <li key={j} className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-semibold text-brand-700">
-                    {j + 1}
-                  </span>
-                  <span className="text-sm leading-relaxed text-zinc-600">
-                    <Inline text={item} />
-                  </span>
-                </li>
-              ))}
-            </ol>
-          );
-        }
-        // example — a highlighted worked-answer panel
-        return (
-          <div
-            key={i}
-            className="space-y-2.5 rounded-xl border border-brand-100 bg-brand-50 p-4"
-          >
-            {block.items.map((item, j) => (
-              <p key={j} className="text-sm leading-relaxed text-brand-900/80">
-                <Inline text={item} />
-              </p>
-            ))}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Accordion                                                           */
-/* ------------------------------------------------------------------ */
-
-function AccordionRow({ item }: { item: PracticeItem }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="group flex w-full cursor-pointer items-center justify-between gap-4 px-5 py-4 text-left"
-      >
-        <span
-          className={cn(
-            "text-sm font-medium transition-colors",
-            open ? "text-brand-700" : "text-brand-900 group-hover:text-brand-700"
-          )}
-        >
-          {item.question}
-        </span>
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 shrink-0 text-brand-400 transition-transform duration-300",
-            open && "rotate-180"
-          )}
-        />
-      </button>
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows] duration-300 ease-in-out",
-          open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]"
-        )}
-      >
-        <div className="overflow-hidden">
-          <div className="px-5 pb-5">
-            <Blocks blocks={item.answer} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Accordion({ items }: { items: PracticeItem[] }) {
-  return (
-    <Card className="divide-y divide-brand-100">
-      {items.map((item) => (
-        <AccordionRow key={item.question} item={item} />
-      ))}
-    </Card>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /* Extra cards                                                         */
@@ -183,6 +52,28 @@ function StoryBankCard() {
         <ArrowRight className="h-4 w-4 shrink-0 text-brand-400" />
       </Card>
     </Link>
+  );
+}
+
+function MathGymJumpCard({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Card className="flex flex-wrap items-center gap-4 p-5">
+      <div className="rounded-xl bg-brand-100 p-2.5 text-brand-600">
+        <Calculator className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-brand-900">
+          The arithmetic games are 100% trainable
+        </p>
+        <p className="text-sm text-zinc-500">
+          The 60-second sprints in the Math Gym are the closest thing to the
+          real assessment format — streaks, clock, and all.
+        </p>
+      </div>
+      <Button variant="secondary" size="sm" onClick={onOpen}>
+        Open the Math Gym
+      </Button>
+    </Card>
   );
 }
 
@@ -232,13 +123,13 @@ function AiMockPlaceholder() {
 
 export function PracticeView() {
   const [tab, setTab] = useState<PracticeTabValue>("finance");
-  const active = PRACTICE_TABS.find((t) => t.value === tab) ?? PRACTICE_TABS[0];
+  const meta = PRACTICE_TABS.find((t) => t.value === tab) ?? PRACTICE_TABS[0];
 
   return (
     <div>
       <PageHeader
         title="Practice"
-        description="Real study material for the three interviews that matter: technicals, cases, and behaviorals."
+        description="Your prep gym: technicals, cases, stories, the jargon, math reps, and the robot interviews. Everything opens when you tap it — no walls of text."
       />
 
       {/* Segmented tabs */}
@@ -270,14 +161,41 @@ export function PracticeView() {
         })}
       </div>
 
-      <div key={active.value} className="animate-fade-up space-y-4">
-        <p className="max-w-3xl px-1 text-sm text-zinc-500">{active.intro}</p>
+      <div key={tab} className="animate-fade-up space-y-4">
+        <p className="max-w-3xl px-1 text-sm text-zinc-500">{meta.intro}</p>
 
-        <Accordion items={active.items} />
+        {tab === "finance" && (
+          <>
+            <Accordion items={QA_TABS.finance.items} />
+            <GoDeeperNote text={QA_TABS.finance.goDeeper} />
+          </>
+        )}
 
-        {active.value === "behavioral" && <StoryBankCard />}
+        {tab === "consulting" && (
+          <>
+            <Accordion items={QA_TABS.consulting.items} />
+            <GoDeeperNote text={QA_TABS.consulting.goDeeper} />
+          </>
+        )}
 
-        <GoDeeperNote text={active.goDeeper} />
+        {tab === "behavioral" && (
+          <>
+            <Accordion items={QA_TABS.behavioral.items} />
+            <StoryBankCard />
+            <GoDeeperNote text={QA_TABS.behavioral.goDeeper} />
+          </>
+        )}
+
+        {tab === "terms" && <KeyTermsTab />}
+
+        {tab === "mathgym" && <MathGymTab />}
+
+        {tab === "online" && (
+          <>
+            <Accordion items={ONLINE_ITEMS} />
+            <MathGymJumpCard onOpen={() => setTab("mathgym")} />
+          </>
+        )}
       </div>
 
       <div className="mt-8">

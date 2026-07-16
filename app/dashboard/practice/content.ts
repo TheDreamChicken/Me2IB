@@ -1,24 +1,43 @@
 // Static prep content for the Practice hub. No DB — this is study material.
 
+import {
+  DCF_EXAMPLE,
+  EV_EQUITY_EXAMPLE,
+  LBO_EXAMPLE,
+  PROFIT_EXAMPLE,
+  SIZING_EXAMPLE,
+} from "./worked-examples";
+
 export type ContentBlock =
   | { type: "p"; text: string }
   | { type: "list"; items: string[] }
   | { type: "steps"; items: string[] }
-  | { type: "example"; items: string[] };
+  | { type: "example"; items: string[] }
+  | { type: "reveal"; label: string; blocks: ContentBlock[] };
+
+export type WorkedExample = {
+  simple: ContentBlock[];
+  real: ContentBlock[];
+};
 
 export type PracticeItem = {
   question: string;
   answer: ContentBlock[];
+  workedExample?: WorkedExample;
 };
 
-export type PracticeTabValue = "finance" | "consulting" | "behavioral";
+export type PracticeTabValue =
+  | "finance"
+  | "consulting"
+  | "behavioral"
+  | "terms"
+  | "mathgym"
+  | "online";
 
-export type PracticeTab = {
+export type PracticeTabMeta = {
   value: PracticeTabValue;
   label: string;
   intro: string;
-  goDeeper: string;
-  items: PracticeItem[];
 };
 
 /* ------------------------------------------------------------------ */
@@ -42,8 +61,14 @@ const FINANCE_ITEMS: PracticeItem[] = [
         ],
       },
       {
-        type: "p",
-        text: "Classic follow-up: \"If you could only pick one statement to judge a company's health?\" The standard answer is the cash flow statement — cash is the hardest thing to manipulate, and companies fail by running out of cash, not by reporting accounting losses.",
+        type: "reveal",
+        label: "The classic follow-up",
+        blocks: [
+          {
+            type: "p",
+            text: "\"If you could only pick one statement to judge a company's health?\" The standard answer is the **cash flow statement** — cash is the hardest thing to manipulate, and companies fail by running out of cash, not by reporting accounting losses.",
+          },
+        ],
       },
     ],
   },
@@ -101,10 +126,17 @@ const FINANCE_ITEMS: PracticeItem[] = [
         text: "Intuition: debt is added because a buyer must assume or repay it; cash is subtracted because it's a non-operating asset the buyer effectively gets back at closing. That's why EV is capital-structure-neutral — two identical businesses with different debt loads have the same EV.",
       },
       {
-        type: "p",
-        text: "Pair multiples consistently: EV goes with metrics available to all investors (revenue, EBITDA, EBIT); equity value goes with post-interest metrics (net income, so P/E). Something like EV / net income is a classic red flag. Bonus point: equity value can't go below zero, but enterprise value can be negative (a big cash pile against a small market cap).",
+        type: "reveal",
+        label: "The multiple-pairing rule",
+        blocks: [
+          {
+            type: "p",
+            text: "Pair multiples consistently: EV goes with metrics available to all investors (revenue, EBITDA, EBIT); equity value goes with post-interest metrics (net income, so P/E). Something like EV / net income is a classic red flag. Bonus point: equity value can't go below zero, but enterprise value can be negative (a big cash pile against a small market cap).",
+          },
+        ],
       },
     ],
+    workedExample: EV_EQUITY_EXAMPLE,
   },
   {
     question: "What are the three main valuation methodologies?",
@@ -118,8 +150,14 @@ const FINANCE_ITEMS: PracticeItem[] = [
         ],
       },
       {
-        type: "p",
-        text: "Common follow-up: \"Which gives the highest value?\" Usually precedent transactions because of the control premium, but the honest answer is \"it depends\" — a DCF with aggressive assumptions can top anything. Bankers also often run an LBO analysis as a floor: the maximum a financial sponsor could pay and still hit its return target.",
+        type: "reveal",
+        label: "Common follow-up: which one gives the highest value?",
+        blocks: [
+          {
+            type: "p",
+            text: "Usually precedent transactions because of the control premium, but the honest answer is \"it depends\" — a DCF with aggressive assumptions can top anything. Bankers also often run an LBO analysis as a floor: the maximum a financial sponsor could pay and still hit its return target.",
+          },
+        ],
       },
     ],
   },
@@ -140,6 +178,7 @@ const FINANCE_ITEMS: PracticeItem[] = [
         text: "Then sanity-check it. Terminal value is often more than half of total value — if it's 90%, your window is too short or your assumptions are off. Always sensitize the output across a range of WACC and terminal growth rates, and cross-check the implied multiples against comps.",
       },
     ],
+    workedExample: DCF_EXAMPLE,
   },
   {
     question: "What is WACC and how do you calculate it?",
@@ -160,8 +199,14 @@ const FINANCE_ITEMS: PracticeItem[] = [
         ],
       },
       {
-        type: "p",
-        text: "Intuition worth saying: debt is cheaper than equity — it's paid first and the interest is tax-deductible — so some leverage lowers WACC. But past a point more debt makes both debt and equity riskier and WACC rises again.",
+        type: "reveal",
+        label: "The intuition worth saying out loud",
+        blocks: [
+          {
+            type: "p",
+            text: "Debt is cheaper than equity — it's paid first and the interest is tax-deductible — so some leverage lowers WACC. But past a point more debt makes both debt and equity riskier and WACC rises again.",
+          },
+        ],
       },
     ],
   },
@@ -194,7 +239,7 @@ const FINANCE_ITEMS: PracticeItem[] = [
     answer: [
       {
         type: "p",
-        text: "In a leveraged buyout, a private equity firm buys a company using a large amount of debt — often 50–70% of the purchase price — and the company's own cash flows service and repay that debt. The classic analogy: buying a rental property with a mortgage. Small down payment, the tenant's rent pays the loan down, and you keep the upside when you sell.",
+        text: "In a leveraged buyout, a private equity firm buys a company using a large amount of debt — often 50–70% of the purchase price — and the company's own cash flows service and repay that debt.",
       },
       {
         type: "steps",
@@ -205,10 +250,17 @@ const FINANCE_ITEMS: PracticeItem[] = [
         ],
       },
       {
-        type: "p",
-        text: "Good LBO candidates have stable, predictable cash flows, low capex needs, a defensible market position, little existing debt, and a strong management team. Sponsors typically underwrite to roughly a 20%+ IRR, or 2–3x their invested capital.",
+        type: "reveal",
+        label: "What makes a good LBO target?",
+        blocks: [
+          {
+            type: "p",
+            text: "Stable, predictable cash flows, low capex needs, a defensible market position, little existing debt, and a strong management team. Sponsors typically underwrite to roughly a 20%+ IRR, or 2–3x their invested capital.",
+          },
+        ],
       },
     ],
+    workedExample: LBO_EXAMPLE,
   },
   {
     question: "\"Why investment banking?\" — how to frame your answer.",
@@ -227,8 +279,14 @@ const FINANCE_ITEMS: PracticeItem[] = [
         ],
       },
       {
-        type: "p",
-        text: "Avoid: money and prestige, \"I thrive in fast-paced environments,\" and paraphrasing the firm's website. Do: name specific people you've spoken to and what they told you about the group — it proves the diligence is real. Have a firm-specific version ready for every interview.",
+        type: "reveal",
+        label: "The do's and don'ts",
+        blocks: [
+          {
+            type: "p",
+            text: "Avoid: money and prestige, \"I thrive in fast-paced environments,\" and paraphrasing the firm's website. Do: name specific people you've spoken to and what they told you about the group — it proves the diligence is real. Have a firm-specific version ready for every interview.",
+          },
+        ],
       },
     ],
   },
@@ -257,8 +315,14 @@ const CONSULTING_ITEMS: PracticeItem[] = [
         ],
       },
       {
-        type: "p",
-        text: "Two formats to practice: **candidate-led** (Bain, BCG — you drive the roadmap and decide where to go next) and **interviewer-led** (McKinsey — they steer between questions and you go deep on each one).",
+        type: "reveal",
+        label: "The two formats to practice",
+        blocks: [
+          {
+            type: "p",
+            text: "**Candidate-led** (Bain, BCG — you drive the roadmap and decide where to go next) and **interviewer-led** (McKinsey — they steer between questions and you go deep on each one).",
+          },
+        ],
       },
     ],
   },
@@ -278,13 +342,10 @@ const CONSULTING_ITEMS: PracticeItem[] = [
       },
       {
         type: "p",
-        text: "Then diagnose like a doctor: which line item moved, when did it start, is it company-specific or industry-wide (how are competitors doing?), and is it isolated to one segment or geography? Each answer prunes half the tree.",
-      },
-      {
-        type: "p",
-        text: "Finally, match the fix to the cause — pricing action, mix shift, cost restructuring, supplier renegotiation, or exiting an unprofitable segment — and quantify the impact of your recommendation whenever the data allows.",
+        text: "Then diagnose like a doctor: which line item moved, when did it start, is it company-specific or industry-wide, and is it isolated to one segment or geography? Each answer prunes half the tree. Finally, match the fix to the cause and quantify it whenever the data allows.",
       },
     ],
+    workedExample: PROFIT_EXAMPLE,
   },
   {
     question: "The market entry framework.",
@@ -309,31 +370,24 @@ const CONSULTING_ITEMS: PracticeItem[] = [
     ],
   },
   {
-    question: "Market sizing, with a worked example.",
+    question: "Market sizing, step by step.",
     answer: [
       {
         type: "p",
-        text: "Market sizing tests structured estimation, not trivia. Worked example: **\"How many cups of coffee does Chicago drink per day?\"**",
+        text: "Market sizing tests structured estimation, not trivia. The method is always the same:",
       },
       {
         type: "steps",
         items: [
-          "**Population:** Chicago proper is roughly 2.7M people.",
-          "**Adults:** about 75% → 2.7M × 0.75 ≈ **2M adults**.",
-          "**Coffee drinkers:** assume ~60% of adults drink coffee → 2M × 0.6 = **1.2M drinkers**.",
-          "**Cups per day:** the average drinker has about 2 cups → 1.2M × 2 = **2.4M cups**.",
-          "**Adjust:** add roughly 10% for commuters, tourists, and coffee-drinking teenagers → **≈2.6–2.7M cups per day**. Call it 2.5–3M.",
+          "**Clarify the metric:** units or dollars? Per year or per day? Which geography and segment?",
+          "**Pick a path:** top-down (population → filters) or bottom-up (outlets × sales per outlet) — and offer the other as a cross-check at the end.",
+          "**Estimate with round numbers** and state every assumption out loud. Inviting correction is a feature, not a weakness.",
+          "**Multiply carefully,** writing K / M / B next to every number. Magnitude errors kill more cases than arithmetic ones.",
+          "**Sanity check** the answer against something you know — per-person, per-day intuition — before you present it.",
         ],
       },
-      {
-        type: "p",
-        text: "**Sanity check:** that's about one cup per resident per day — plausible. Always close a sizing with a check like this; catching your own unreasonable answer scores points.",
-      },
-      {
-        type: "p",
-        text: "Method notes: state every assumption out loud and invite correction; round aggressively but track the direction of the error; and pick top-down (population → filters) or bottom-up (coffee shops × cups sold per shop) — then offer the other as a cross-check.",
-      },
     ],
+    workedExample: SIZING_EXAMPLE,
   },
   {
     question: "Mental math tips that hold up under pressure.",
@@ -345,10 +399,13 @@ const CONSULTING_ITEMS: PracticeItem[] = [
           "**Strip the zeros:** 350 × 12,000 → 35 × 12 = 420, add back four zeros → 4.2M. Handle digits and magnitude separately.",
           "**Build percentages from 10% and 1%:** 17% of 340 = 10% (34) + 5% (17) + 2% (6.8) ≈ 58.",
           "**Break up multiplication:** 18 × 35 = (20 × 35) − (2 × 35) = 700 − 70 = 630.",
-          "**Label everything:** write K / M / B next to every number as you go. Magnitude errors kill more cases than arithmetic errors.",
+          "**Label everything:** write K / M / B next to every number as you go.",
           "**Narrate while you calculate:** \"I'll take 10% and double it\" — the interviewer can follow along and course-correct you early.",
-          "**Drill daily:** ten minutes a day of percentages, large multiplication, and growth rates for two or three weeks before interviews compounds fast.",
         ],
+      },
+      {
+        type: "p",
+        text: "Then actually put in the reps — the **Math Gym** tab on this page is built for exactly that. Sixty seconds a day compounds fast.",
       },
     ],
   },
@@ -394,21 +451,23 @@ const BEHAVIORAL_ITEMS: PracticeItem[] = [
         ],
       },
       {
-        type: "p",
-        text: "**Worked example — \"Tell me about a time you led a team under pressure\":**",
-      },
-      {
-        type: "example",
-        items: [
-          "**Situation:** \"Junior year, I led a four-person team in our university's case competition. Two days before the final round, the organizers ruled our core dataset out of bounds — about 60% of our analysis depended on it.\"",
-          "**Task:** \"As team lead, I had to rebuild the analysis in 48 hours and keep the team functional while everyone also had midterms.\"",
-          "**Action:** \"I triaged the deck into what survived and what didn't, split the rebuild into three workstreams matched to each person's strengths, and replaced ad-hoc messages with two 30-minute check-ins a day. I took the hardest piece — rebuilding the market model from public filings — myself, and made the call to cut two slides we could no longer defend rather than patch them.\"",
-          "**Result:** \"We presented on time and took second out of eighteen teams, and the judges specifically praised the rigor of the rebuilt model. Since then I stress-test every analysis with a 'what breaks if this input disappears' check.\"",
+        type: "reveal",
+        label: "See a full worked answer — \"Tell me about a time you led a team under pressure\"",
+        blocks: [
+          {
+            type: "example",
+            items: [
+              "**Situation:** \"Junior year, I led a four-person team in our university's case competition. Two days before the final round, the organizers ruled our core dataset out of bounds — about 60% of our analysis depended on it.\"",
+              "**Task:** \"As team lead, I had to rebuild the analysis in 48 hours and keep the team functional while everyone also had midterms.\"",
+              "**Action:** \"I triaged the deck into what survived and what didn't, split the rebuild into three workstreams matched to each person's strengths, and replaced ad-hoc messages with two 30-minute check-ins a day. I took the hardest piece — rebuilding the market model from public filings — myself, and made the call to cut two slides we could no longer defend rather than patch them.\"",
+              "**Result:** \"We presented on time and took second out of eighteen teams, and the judges specifically praised the rigor of the rebuilt model. Since then I stress-test every analysis with a 'what breaks if this input disappears' check.\"",
+            ],
+          },
+          {
+            type: "p",
+            text: "Why it works: specific numbers, clear personal ownership, a real trade-off (cutting slides), and a lesson that transfers to the job.",
+          },
         ],
-      },
-      {
-        type: "p",
-        text: "Why it works: specific numbers, clear personal ownership, a real trade-off (cutting slides), and a lesson that transfers to the job.",
       },
     ],
   },
@@ -431,8 +490,14 @@ const BEHAVIORAL_ITEMS: PracticeItem[] = [
         ],
       },
       {
-        type: "p",
-        text: "For each story, prepare a full 2-minute STAR version and a 30-second short version. In the room, map the story to the question asked — re-angle it, don't recite it.",
+        type: "reveal",
+        label: "How to actually use them in the room",
+        blocks: [
+          {
+            type: "p",
+            text: "For each story, prepare a full 2-minute STAR version and a 30-second short version. In the room, map the story to the question asked — re-angle it, don't recite it.",
+          },
+        ],
       },
     ],
   },
@@ -442,12 +507,12 @@ const BEHAVIORAL_ITEMS: PracticeItem[] = [
       {
         type: "list",
         items: [
-          "**Headline first:** open with the one-line summary — \"This is a time I turned around a failing project\" — then tell the story. Structure shows before you've said thirty words.",
+          "**Headline first:** open with the one-line summary — \"This is a time I turned around a failing project\" — then tell the story.",
           "**\"I\" over \"we\":** credit the team, but be explicit about what you personally did. Interviewers can't hire the team.",
           "**Quantify:** numbers make stories credible — team size, timeline, percentage improvement, final ranking.",
           "**Don't memorize word-for-word:** scripted answers sound flat and collapse under follow-ups. Memorize the beats; practice out loud until it flows.",
           "**Watch the clock:** two minutes, then stop talking. Interviewers will follow up on what interests them — leave room.",
-          "**Answer the question actually asked:** the same story is told differently for \"tell me about a failure\" versus \"tell me about pressure.\" Emphasize the relevant beat.",
+          "**Answer the question actually asked:** the same story is told differently for \"tell me about a failure\" versus \"tell me about pressure.\"",
           "**Manage energy:** sit up, slow down slightly, pause instead of saying \"um.\" Enthusiasm for your own story is contagious — and so is boredom.",
         ],
       },
@@ -459,32 +524,60 @@ const BEHAVIORAL_ITEMS: PracticeItem[] = [
 /* Tabs                                                                */
 /* ------------------------------------------------------------------ */
 
-export const PRACTICE_TABS: PracticeTab[] = [
+export const PRACTICE_TABS: PracticeTabMeta[] = [
   {
     value: "finance",
-    label: "Finance technicals",
+    label: "Finance",
     intro:
-      "The ten questions below cover the core technical ground for IB and finance first rounds. Read an answer, close it, then try to reproduce it out loud — that's the rep that counts.",
-    goDeeper:
-      "Want the full 400-question guides and modeling prep? Head to",
-    items: FINANCE_ITEMS,
+      "The technical questions that actually come up in first rounds. Tap one open — the meaty ones have a worked example in two flavors: dumb-simple numbers, and the version you'd say in the interview.",
   },
   {
     value: "consulting",
-    label: "Consulting cases",
+    label: "Consulting",
     intro:
-      "How cases actually work, the two frameworks you'll really use, a worked market sizing, and the math habits that keep you calm when the interviewer is watching.",
-    goDeeper:
-      "For casebooks and live case-partner communities, browse",
-    items: CONSULTING_ITEMS,
+      "How cases really work, plus the frameworks you'll genuinely use. Same deal here: crack a question open and try the worked examples both ways.",
   },
   {
     value: "behavioral",
     label: "Behavioral",
     intro:
-      "Behavioral answers win offers more often than technicals do. Build six great stories and learn to deliver them like a human, not a script.",
-    goDeeper:
-      "For more question banks and firm-specific behavioral guides, see",
-    items: BEHAVIORAL_ITEMS,
+      "This is where offers actually get won. Six good stories, delivered like a human — everything here is short on purpose.",
+  },
+  {
+    value: "terms",
+    label: "Key Terms",
+    intro:
+      "The vocab everyone around you pretends they already know. Tap a term for the plain-English version; go deeper only when you actually care.",
+  },
+  {
+    value: "mathgym",
+    label: "Math Gym",
+    intro:
+      "Fast, calm arithmetic is a trainable skill, and interviewers can tell who's been training. Sixty seconds, no calculator — see what you've got.",
+  },
+  {
+    value: "online",
+    label: "Online Interviews",
+    intro:
+      "One-way video screens and the weird little assessment games firms run before a human ever sees you. Much less scary once you know exactly what's coming.",
   },
 ];
+
+/** Q&A accordion data + the "go deeper" footnote, for the three classic tabs. */
+export const QA_TABS: Record<
+  "finance" | "consulting" | "behavioral",
+  { items: PracticeItem[]; goDeeper: string }
+> = {
+  finance: {
+    items: FINANCE_ITEMS,
+    goDeeper: "Want the full 400-question guides and modeling prep? Head to",
+  },
+  consulting: {
+    items: CONSULTING_ITEMS,
+    goDeeper: "For casebooks and live case-partner communities, browse",
+  },
+  behavioral: {
+    items: BEHAVIORAL_ITEMS,
+    goDeeper: "For more question banks and firm-specific behavioral guides, see",
+  },
+};
