@@ -23,26 +23,20 @@ import {
 } from "@/lib/constants";
 import { daysSinceTouch, followupDelta, isOverdue } from "@/lib/contact-utils";
 import { localDateKey, useNow } from "@/components/use-today";
-import {
-  deleteContact,
-  markContacted,
-  upsertContact,
-} from "@/lib/actions/contacts";
+import { deleteContact, markContacted } from "@/lib/actions/contacts";
+import { ContactForm } from "./contact-form";
 import {
   Badge,
   Button,
   Card,
   DeleteButton,
   EmptyState,
-  Field,
-  Input,
   Modal,
   PageHeader,
   SearchInput,
   Select,
   Spinner,
   StatCard,
-  Textarea,
   cn,
 } from "@/components/ui";
 
@@ -138,157 +132,6 @@ function TouchBadge({ contact, now }: { contact: Contact; now: Date | null }) {
       <CheckCircle2 className="h-3 w-3" />
       In touch
     </Badge>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Add / edit form                                                     */
-/* ------------------------------------------------------------------ */
-
-function ContactForm({
-  contact,
-  onDone,
-}: {
-  contact: Contact | null;
-  onDone: () => void;
-}) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  function submit(formData: FormData) {
-    startTransition(async () => {
-      const res = await upsertContact(formData);
-      if (res.error) setError(res.error);
-      else onDone();
-    });
-  }
-
-  return (
-    <form action={submit} className="space-y-4">
-      {contact && <input type="hidden" name="id" value={contact.id} />}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Name *">
-          <Input name="name" defaultValue={contact?.name} required autoFocus />
-        </Field>
-        <Field label="Company">
-          <Input name="company" defaultValue={contact?.company ?? ""} />
-        </Field>
-        <Field label="Position">
-          <Input name="position" defaultValue={contact?.position ?? ""} />
-        </Field>
-        <Field label="Industry">
-          <Select name="industry" defaultValue={contact?.industry ?? ""}>
-            <option value="">—</option>
-            {INDUSTRIES.map((i) => (
-              <option key={i.value} value={i.value}>
-                {i.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Email">
-          <Input name="email" type="email" defaultValue={contact?.email ?? ""} />
-        </Field>
-        <Field label="Phone">
-          <Input name="phone" defaultValue={contact?.phone ?? ""} />
-        </Field>
-        <Field label="LinkedIn URL">
-          <Input
-            name="linkedin_url"
-            placeholder="https://linkedin.com/in/..."
-            defaultValue={contact?.linkedin_url ?? ""}
-          />
-        </Field>
-        <Field label="Photo URL" hint="Paste an image link (e.g. from their LinkedIn photo).">
-          <Input name="photo_url" defaultValue={contact?.photo_url ?? ""} />
-        </Field>
-        <Field label="Location">
-          <Input name="location" defaultValue={contact?.location ?? ""} />
-        </Field>
-        <Field label="School / alma mater">
-          <Input name="alma_mater" defaultValue={contact?.alma_mater ?? ""} />
-        </Field>
-        <Field label="How you met / know them">
-          <Input
-            name="how_met"
-            placeholder="Coffee chat via alumni database..."
-            defaultValue={contact?.how_met ?? ""}
-          />
-        </Field>
-        <Field label="Connection strength">
-          <Select
-            name="connection_strength"
-            defaultValue={String(contact?.connection_strength ?? 2)}
-          >
-            {CONNECTION_STRENGTHS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.value} — {s.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Last contacted">
-          <Input
-            name="last_contacted"
-            type="date"
-            defaultValue={contact?.last_contacted ?? ""}
-          />
-        </Field>
-        <Field label="Follow-up cadence (days)" hint="You'll get a nudge when this lapses.">
-          <Input
-            name="followup_interval_days"
-            type="number"
-            min={1}
-            defaultValue={String(contact?.followup_interval_days ?? 21)}
-          />
-        </Field>
-        <Field label="Status">
-          <Select name="status" defaultValue={contact?.status ?? "active"}>
-            <option value="active">Active — keep warm</option>
-            <option value="warm">Warm — occasional touch</option>
-            <option value="dormant">Dormant</option>
-            <option value="archived">Archived</option>
-          </Select>
-        </Field>
-        <Field label="Tags" hint="Comma-separated, e.g. alumni, IB, mentor">
-          <Input name="tags" defaultValue={contact?.tags?.join(", ") ?? ""} />
-        </Field>
-      </div>
-
-      <Field label="Who they are / what they do">
-        <Textarea
-          name="relationship"
-          placeholder="VP in Healthcare coverage, super friendly, offered to intro me to analysts..."
-          defaultValue={contact?.relationship ?? ""}
-        />
-      </Field>
-      <Field label="Shared interests" hint="Common ground makes outreach 10x easier.">
-        <Textarea
-          name="shared_interests"
-          placeholder="Both play tennis, both from Chicago, same fraternity..."
-          defaultValue={contact?.shared_interests ?? ""}
-        />
-      </Field>
-      <Field label="Notes">
-        <Textarea name="notes" defaultValue={contact?.notes ?? ""} />
-      </Field>
-
-      {error && (
-        <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
-          {error}
-        </p>
-      )}
-
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={pending}>
-          {pending ? <Spinner /> : contact ? "Save changes" : "Add contact"}
-        </Button>
-      </div>
-    </form>
   );
 }
 
@@ -487,7 +330,7 @@ export function ContactsView({ contacts }: { contacts: Contact[] }) {
     <div>
       <PageHeader
         title="Contacts"
-        description="Your network is your net worth. Keep every connection warm."
+        description="Every coffee chat, cold email, and friendly analyst lives here. Jot people down as you meet them — we'll nudge you before anyone goes quiet."
         action={
           <Button onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" /> Add contact
@@ -613,19 +456,22 @@ export function ContactsView({ contacts }: { contacts: Contact[] }) {
       )}
 
       {/* Add */}
-      <Modal open={adding} onClose={() => setAdding(false)} title="Add contact" wide>
-        <ContactForm contact={null} onDone={() => setAdding(false)} />
+      <Modal
+        open={adding}
+        onClose={() => setAdding(false)}
+        title="Add someone new"
+      >
+        {adding && <ContactForm contact={null} onDone={() => setAdding(false)} />}
       </Modal>
 
       {/* Edit */}
-      <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title="Edit contact"
-        wide
-      >
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit contact">
         {editing && (
-          <ContactForm contact={editing} onDone={() => setEditing(null)} />
+          <ContactForm
+            key={editing.id}
+            contact={editing}
+            onDone={() => setEditing(null)}
+          />
         )}
       </Modal>
 
