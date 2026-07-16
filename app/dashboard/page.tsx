@@ -462,18 +462,18 @@ export default async function DashboardOverviewPage() {
       <div className="mb-8">
         <SectionLabel>Quick actions</SectionLabel>
         <div className="flex flex-wrap gap-2">
-          <QuickAction href="/dashboard/contacts" icon={Plus} label="Add contact" />
+          <QuickAction href="/dashboard/contacts" icon={Plus} label="Add a contact" />
           <QuickAction
             href="/dashboard/applications"
             icon={Briefcase}
-            label="Add application"
+            label="Log an application"
           />
           <QuickAction
             href="/dashboard/calendar"
             icon={CalendarDays}
             label="Open calendar"
           />
-          <QuickAction href="/dashboard/plan" icon={Map} label="My plan" />
+          <QuickAction href="/dashboard/plan" icon={Map} label="See my plan" />
         </div>
       </div>
 

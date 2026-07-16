@@ -58,34 +58,47 @@ const OPPORTUNITY_STATUSES = [
 
 const HUNTING_SPOTS = [
   {
-    name: "LinkedIn Jobs",
-    href: "https://www.linkedin.com/jobs/",
-    blurb: "Set alerts for your target roles — postings fill up fast.",
-  },
-  {
     name: "Handshake",
     href: "https://joinhandshake.com/",
-    blurb: "School-exclusive postings and on-campus recruiting events.",
+    blurb:
+      "Sort for 'Apply Externally' roles — way better odds than the 1-click Easy Apply pile.",
   },
   {
-    name: "WSO Job Board",
+    name: "LinkedIn Jobs",
+    href: "https://www.linkedin.com/jobs/",
+    blurb: "Set alerts; apply within 48h of posting or don't bother.",
+  },
+  {
+    name: "BuiltIn",
+    href: "https://builtin.com/",
+    blurb:
+      "City-by-city startup/tech boards — great for ops, marketing, product.",
+  },
+  {
+    name: "Greenhouse boards",
+    href: "https://www.greenhouse.io/",
+    blurb:
+      "Tons of companies' REAL application portals run on Greenhouse — applying at the source beats aggregators.",
+  },
+  {
+    name: "Wellfound",
+    href: "https://wellfound.com/",
+    blurb: "Startup roles, often straight to a founder's inbox.",
+  },
+  {
+    name: "Wall Street Oasis job board",
     href: "https://www.wallstreetoasis.com/job-board",
-    blurb: "Finance-focused board — heavy on IB, PE, and buy-side roles.",
-  },
-  {
-    name: "Indeed",
-    href: "https://www.indeed.com/",
-    blurb: "Broad coverage; good for middle-market and regional firms.",
+    blurb: "Finance-specific, boutique-heavy.",
   },
   {
     name: "RippleMatch",
     href: "https://ripplematch.com/",
-    blurb: "Early-career matching — many firms source candidates here.",
+    blurb: "Set it up once, let it match you.",
   },
   {
     name: "Forage",
     href: "https://www.theforage.com/",
-    blurb: "Free virtual experience programs — great resume signal.",
+    blurb: "Free virtual 'internships' — resume line + genuine skill preview.",
   },
 ] as const;
 
@@ -509,7 +522,7 @@ export function OpportunitiesView({
     <div>
       <PageHeader
         title="Opportunities"
-        description="A holding pen for postings you spot — save the promising ones, then push them into your tracker."
+        description="Spot something promising? Park it here before the tab gets lost, then push the keepers into your tracker."
         action={
           <Button onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" /> Add opportunity

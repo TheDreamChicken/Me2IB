@@ -7,10 +7,12 @@ import {
   Check,
   Clock,
   Copy,
+  ExternalLink,
   ListChecks,
   MapPin,
   Pencil,
   Plus,
+  Sparkles,
 } from "lucide-react";
 import type { Experience } from "@/lib/types";
 import { ROLE_TYPES, labelFor } from "@/lib/constants";
@@ -209,6 +211,14 @@ function ExperienceForm({
       <Field label="Skills" hint="Comma-separated, e.g. Excel, DCF modeling, PowerPoint">
         <Input name="skills" defaultValue={experience?.skills?.join(", ") ?? ""} />
       </Field>
+      <Field label="Link" hint="Attach anything — a deck, doc, repo, article">
+        <Input
+          name="link"
+          type="url"
+          placeholder="https://..."
+          defaultValue={experience?.link ?? ""}
+        />
+      </Field>
 
       {error && (
         <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
@@ -276,6 +286,17 @@ function ExperienceCard({
                 <MapPin className="h-3.5 w-3.5" />
                 {experience.location}
               </span>
+            )}
+            {experience.link && (
+              <a
+                href={experience.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-brand-500 transition-colors hover:text-brand-700"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Link
+              </a>
             )}
           </div>
         </div>
@@ -380,6 +401,17 @@ function CompiledView({ experiences }: { experiences: Experience[] }) {
                 {exp.location && (
                   <span className="text-zinc-500"> — {exp.location}</span>
                 )}
+                {exp.link && (
+                  <a
+                    href={exp.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open attached link"
+                    className="ml-1.5 inline-flex align-middle text-brand-400 transition-colors hover:text-brand-600"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
               </p>
               {range && (
                 <p className="text-xs italic text-zinc-500">{range}</p>
@@ -420,13 +452,33 @@ export function ExperienceView({ experiences }: { experiences: Experience[] }) {
     <div>
       <PageHeader
         title="Experience"
-        description="Everything you've done, ready to become resume lines."
+        description="Log it all — clubs, jobs, projects, random side quests. It all turns into resume lines eventually."
         action={
           <Button onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" /> Add experience
           </Button>
         }
       />
+
+      {/* AI resume import placeholder */}
+      <Card className="mb-6 border-dashed bg-brand-50/60 p-5">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="rounded-2xl bg-brand-100 p-3 text-brand-600">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-brand-900">
+              Pull from your resume — coming soon
+            </p>
+            <p className="mt-0.5 text-sm text-zinc-500">
+              One upload, everything logged.
+            </p>
+          </div>
+          <Button variant="secondary" disabled>
+            <Sparkles className="h-4 w-4" /> Coming soon
+          </Button>
+        </div>
+      </Card>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatCard

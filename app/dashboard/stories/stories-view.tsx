@@ -107,8 +107,11 @@ function StoryCard({ story, onClick }: { story: Story; onClick: () => void }) {
       ) : (
         <p className="mt-2 text-xs italic text-zinc-400">No answer yet</p>
       )}
-      {story.tags.length > 0 && (
+      {(story.firm || story.tags.length > 0) && (
         <div className="mt-2 flex flex-wrap gap-1.5">
+          {story.firm && (
+            <Badge className="bg-brand-100 text-brand-700">{story.firm}</Badge>
+          )}
           {story.tags.map((t) => (
             <Badge key={t} className="bg-brand-50 text-brand-600">
               #{t}
@@ -177,6 +180,14 @@ function StoryForm({
         </Field>
       </div>
 
+      <Field label="Firm" hint="Tailoring this for a specific firm? (optional)">
+        <Input
+          name="firm"
+          placeholder="Goldman Sachs, Bain, Evercore..."
+          defaultValue={story?.firm ?? ""}
+        />
+      </Field>
+
       <Field
         label="Answer"
         hint="Structure it with STAR — Situation, Task, Action, Result."
@@ -242,6 +253,11 @@ function StoryDetail({
           <Badge className={strengthBadge(story.strength)}>
             {strengthLabel(story.strength)}
           </Badge>
+          {story.firm && (
+            <Badge className="bg-brand-100 text-brand-700">
+              Tailored for {story.firm}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -254,7 +270,8 @@ function StoryDetail({
         </div>
       ) : (
         <p className="rounded-xl border border-dashed border-brand-200 bg-brand-50/50 px-4 py-3 text-sm italic text-zinc-400">
-          No answer yet — draft one with STAR before the interviewer asks.
+          No answer yet — jot one down so future-you walks in consistent and
+          practiced.
         </p>
       )}
 
@@ -313,6 +330,8 @@ function StoryDetail({
 export function StoriesView({ stories }: { stories: Story[] }) {
   const [query, setQuery] = useState("");
   const [strengthFilter, setStrengthFilter] = useState("");
+  const [tab, setTab] = useState<"general" | "by_firm">("general");
+  const [firmFilter, setFirmFilter] = useState("");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Story | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -320,8 +339,25 @@ export function StoriesView({ stories }: { stories: Story[] }) {
   // Keep the detail modal in sync with fresh server data after actions.
   const selected = stories.find((s) => s.id === selectedId) ?? null;
 
+  const firms = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          stories
+            .map((s) => s.firm)
+            .filter((f): f is string => Boolean(f))
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [stories]
+  );
+
   const filtered = useMemo(() => {
-    let list = stories;
+    let list =
+      tab === "general"
+        ? stories.filter((s) => !s.firm)
+        : stories.filter(
+            (s) => s.firm && (!firmFilter || s.firm === firmFilter)
+          );
     if (strengthFilter) list = list.filter((s) => s.strength === strengthFilter);
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -332,7 +368,7 @@ export function StoriesView({ stories }: { stories: Story[] }) {
       );
     }
     return list;
-  }, [stories, query, strengthFilter]);
+  }, [stories, tab, firmFilter, query, strengthFilter]);
 
   const groups = useMemo(() => {
     const known = new Set<string>(STORY_CATEGORIES.map((c) => c.value));
@@ -358,7 +394,7 @@ export function StoriesView({ stories }: { stories: Story[] }) {
     <div>
       <PageHeader
         title="Story bank"
-        description="Your best stories, ready before the interviewer asks."
+        description="Answer the classics once, keep them polished, and never get caught off guard by 'tell me about a time...' again."
         action={
           <>
             {bankIsSmall && <SeedClassicsButton />}
@@ -368,6 +404,46 @@ export function StoriesView({ stories }: { stories: Story[] }) {
           </>
         }
       />
+
+      {/* General vs firm-tailored tabs */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-xl border border-brand-200 bg-white p-1">
+          {(
+            [
+              { value: "general", label: "General" },
+              { value: "by_firm", label: "By firm" },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => setTab(t.value)}
+              className={cn(
+                "cursor-pointer rounded-lg px-4 py-1.5 text-xs font-medium transition-colors",
+                tab === t.value
+                  ? "bg-brand-600 text-white shadow-sm"
+                  : "text-brand-700 hover:bg-brand-50"
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {tab === "by_firm" && firms.length > 0 && (
+          <Select
+            value={firmFilter}
+            onChange={(e) => setFirmFilter(e.target.value)}
+            className="w-auto"
+          >
+            <option value="">All firms</option>
+            {firms.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </Select>
+        )}
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <SearchInput
@@ -398,11 +474,19 @@ export function StoriesView({ stories }: { stories: Story[] }) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="h-10 w-10" />}
-          title={stories.length === 0 ? "No stories yet" : "No matches"}
+          title={
+            stories.length === 0
+              ? "No stories yet"
+              : tab === "by_firm" && firms.length === 0
+                ? "Nothing firm-specific yet"
+                : "No matches"
+          }
           hint={
             stories.length === 0
               ? "Start with the classic prompts every interviewer asks, or add your own."
-              : "Try a different search or filter."
+              : tab === "by_firm" && firms.length === 0
+                ? "Tag a story with a firm and it'll show up here, ready for that superday."
+                : "Try a different search or filter."
           }
           action={
             stories.length === 0 ? (

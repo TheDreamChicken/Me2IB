@@ -2,19 +2,18 @@
 
 import { useMemo, useState, useTransition } from "react";
 import {
-  AlignLeft,
   BookOpen,
   Download,
   File,
   FileText,
   FolderOpen,
   GraduationCap,
+  Lightbulb,
   Mail,
   Paperclip,
   PenLine,
   Plus,
   Sparkles,
-  Upload,
 } from "lucide-react";
 import type { Document } from "@/lib/types";
 import { DOC_TYPES, INDUSTRIES, labelFor } from "@/lib/constants";
@@ -33,7 +32,6 @@ import {
   SearchInput,
   Select,
   Spinner,
-  Textarea,
   cn,
 } from "@/components/ui";
 
@@ -105,14 +103,13 @@ function DocumentForm({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [mode, setMode] = useState<"upload" | "paste">("upload");
   const isEdit = !!doc;
 
   function submit(formData: FormData) {
     setError(null);
     startTransition(async () => {
       let uploadedPath: string | null = null;
-      if (!isEdit && mode === "upload") {
+      if (!isEdit) {
         const file = formData.get("file") as File | null;
         formData.delete("file"); // don't ship the binary to the server action
         if (!file || file.size === 0) {
@@ -162,31 +159,10 @@ function DocumentForm({
   return (
     <form action={submit} className="space-y-4">
       {doc && <input type="hidden" name="id" value={doc.id} />}
-
-      {!isEdit && (
-        <div className="flex rounded-xl border border-brand-200 bg-brand-50 p-1">
-          {(
-            [
-              { value: "upload", label: "Upload file", icon: Upload },
-              { value: "paste", label: "Paste text", icon: AlignLeft },
-            ] as const
-          ).map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              onClick={() => setMode(m.value)}
-              className={cn(
-                "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                mode === m.value
-                  ? "bg-white text-brand-800 shadow-sm"
-                  : "text-brand-500 hover:text-brand-700"
-              )}
-            >
-              <m.icon className="h-3.5 w-3.5" />
-              {m.label}
-            </button>
-          ))}
-        </div>
+      {/* Preserve legacy pasted text on metadata edits — the action would
+          otherwise null it out when the field is missing from the form. */}
+      {isEdit && doc?.content_text && (
+        <input type="hidden" name="content_text" value={doc.content_text} />
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -233,29 +209,16 @@ function DocumentForm({
         </Field>
       </div>
 
-      {!isEdit && mode === "upload" && (
-        <Field label="File *" hint="PDF or Word doc works best.">
+      {!isEdit && (
+        <Field
+          label="File *"
+          hint="By this point it deserves to be a real PDF — Word docs welcome too."
+        >
           <input
             type="file"
             name="file"
             accept=".pdf,.doc,.docx,.txt,.rtf,.md"
             className="w-full cursor-pointer rounded-xl border border-dashed border-brand-200 bg-white px-3 py-3 text-sm text-zinc-500 transition-shadow file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-brand-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-brand-700 hover:file:bg-brand-200 focus:outline-none focus:ring-2 focus:ring-brand-300"
-          />
-        </Field>
-      )}
-
-      {(isEdit || mode === "paste") && (
-        <Field
-          label={isEdit ? "Content (pasted text)" : "Content *"}
-          hint="Paste the full text — this is what the AI review will read."
-        >
-          <Textarea
-            name="content_text"
-            rows={10}
-            placeholder="Paste your resume / essay text here..."
-            defaultValue={doc?.content_text ?? ""}
-            required={!isEdit}
-            className="min-h-40"
           />
         </Field>
       )}
@@ -463,13 +426,33 @@ export function DocumentsView({ documents }: { documents: Document[] }) {
     <div>
       <PageHeader
         title="Documents"
-        description="Every version of your resume, cover letters, and essays — one tidy shelf."
+        description="Resume v2, v7, v12-final-FINAL — every draft lives here, safe and easy to find."
         action={
           <Button onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" /> Add document
           </Button>
         }
       />
+
+      {/* Friendly resume tip */}
+      <Card className="mb-6 border-dashed bg-brand-50/60 p-5">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
+            <Lightbulb className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-brand-900">
+              Resume tip: stay human
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+              Keep one or two genuinely personal interests on there — the niche
+              hobby, the thing you&apos;d talk about for hours. It&apos;s what
+              interviewers remember and open with, and it&apos;s what makes you
+              more than a GPA.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <SearchInput
@@ -500,7 +483,7 @@ export function DocumentsView({ documents }: { documents: Document[] }) {
           title={documents.length === 0 ? "No documents yet" : "No matches"}
           hint={
             documents.length === 0
-              ? "Upload your resume or paste an essay draft — keep every version in one place."
+              ? "Upload your resume — every version you'll ever tweak gets a safe home here."
               : "Try a different search or filter."
           }
           action={

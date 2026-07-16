@@ -35,6 +35,7 @@ export async function upsertExperience(
     description: str(formData, "description"),
     // Raw multiline string, one bullet per line.
     bullets: str(formData, "bullets"),
+    link: str(formData, "link"),
     skills: (str(formData, "skills") ?? "")
       .split(",")
       .map((s) => s.trim())

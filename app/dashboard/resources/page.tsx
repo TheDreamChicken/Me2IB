@@ -38,10 +38,10 @@ type Section = {
   items: Resource[];
 };
 
-const SECTIONS: Section[] = [
+const FREE_SECTIONS: Section[] = [
   {
-    title: "Guides & prep courses",
-    subtitle: "Technicals, cases, and the classic references everyone quotes.",
+    title: "Guides & prep",
+    subtitle: "Technicals, cases, and the classic references — all free to read.",
     icon: GraduationCap,
     items: [
       {
@@ -51,22 +51,6 @@ const SECTIONS: Section[] = [
         description:
           "The biggest finance forum — recruiting threads, firm reviews, and comp data. Take the cynicism with a grain of salt.",
         href: "https://www.wallstreetoasis.com",
-      },
-      {
-        kind: "link",
-        name: "Breaking Into Wall Street (BIWS)",
-        tag: "Paid course",
-        description:
-          "Paid video courses on financial modeling and valuation. Overkill for behaviorals, excellent for technicals.",
-        href: "https://breakingintowallstreet.com",
-      },
-      {
-        kind: "link",
-        name: "Wall Street Prep",
-        tag: "Paid course",
-        description:
-          "The other big modeling course — banks literally use it to train their own new analysts.",
-        href: "https://www.wallstreetprep.com",
       },
       {
         kind: "link",
@@ -86,43 +70,27 @@ const SECTIONS: Section[] = [
       },
       {
         kind: "link",
-        name: "Rosenbaum & Pearl — Investment Banking",
-        tag: "Book",
-        description:
-          "The valuation textbook (DCF, comps, LBOs, M&A). Dense but definitive — read it once, then keep it as a reference.",
-        href: "https://www.wiley.com/en-us/Investment+Banking%3A+Valuation%2C+LBOs%2C+M%26A%2C+and+IPOs%2C+3rd+Edition-p-9781119706182",
-      },
-      {
-        kind: "link",
         name: "Management Consulted",
         tag: "Consulting",
         description:
-          "Consulting-focused prep: case libraries, firm guides, and interview coaching.",
+          "Consulting-focused prep: free case libraries, firm guides, and salary data (coaching costs extra, but the reading doesn't).",
         href: "https://managementconsulted.com",
-      },
-      {
-        kind: "link",
-        name: "Case in Point",
-        tag: "Book",
-        description:
-          "Cosentino's case-prep classic. Learn the frameworks — then practice enough that you stop sounding like them.",
-        href: "https://www.casequestions.com",
-      },
-      {
-        kind: "link",
-        name: "PrepLounge",
-        tag: "Practice partners",
-        description:
-          "Match with live case-practice partners. Cases are a contact sport — you can't just read about them.",
-        href: "https://www.preplounge.com",
       },
       {
         kind: "link",
         name: "Victor Cheng — CaseInterview.com",
         tag: "Free videos",
         description:
-          "Free videos and the LOMS program — the clearest explanation of how interviewers actually grade cases.",
+          "Free videos with the clearest explanation anywhere of how interviewers actually grade cases.",
         href: "https://www.caseinterview.com",
+      },
+      {
+        kind: "link",
+        name: "PrepLounge",
+        tag: "Freemium",
+        description:
+          "Match with live case-practice partners. Cases are a contact sport — the free tier covers plenty; paid unlocks more.",
+        href: "https://www.preplounge.com",
       },
     ],
   },
@@ -237,6 +205,58 @@ const SECTIONS: Section[] = [
   },
 ];
 
+/** Paid resources — kept deliberately low-key. The free stuff comes first. */
+const PAID_ITEMS: LinkResource[] = [
+  {
+    kind: "link",
+    name: "Breaking Into Wall Street (BIWS)",
+    tag: "Paid course",
+    description:
+      "Paid video courses on financial modeling and valuation. Overkill for behaviorals, excellent for technicals.",
+    href: "https://breakingintowallstreet.com",
+  },
+  {
+    kind: "link",
+    name: "Wall Street Prep",
+    tag: "Paid course",
+    description:
+      "The other big modeling course — banks literally use it to train their own new analysts.",
+    href: "https://www.wallstreetprep.com",
+  },
+  {
+    kind: "link",
+    name: "RocketBlocks",
+    tag: "Paid drills",
+    description:
+      "Drill-style practice for consulting cases — good for reps once you already know the frameworks.",
+    href: "https://www.rocketblocks.me",
+  },
+  {
+    kind: "link",
+    name: "Case in Point",
+    tag: "Book",
+    description:
+      "Cosentino's case-prep classic. Learn the frameworks — then practice enough that you stop sounding like them.",
+    href: "https://www.casequestions.com",
+  },
+  {
+    kind: "link",
+    name: "Victor Cheng's LOMS",
+    tag: "Paid program",
+    description:
+      "Look Over My Shoulder — recordings of real case interviews with commentary. Only worth it if cases still feel like a black box after the free videos.",
+    href: "https://www.caseinterview.com",
+  },
+  {
+    kind: "link",
+    name: "Rosenbaum & Pearl — Investment Banking",
+    tag: "Book",
+    description:
+      "The valuation textbook (DCF, comps, LBOs, M&A). Dense but definitive — read it once, then keep it as a reference.",
+    href: "https://www.wiley.com/en-us/Investment+Banking%3A+Valuation%2C+LBOs%2C+M%26A%2C+and+IPOs%2C+3rd+Edition-p-9781119706182",
+  },
+];
+
 /* ------------------------------------------------------------------ */
 /* Pieces                                                              */
 /* ------------------------------------------------------------------ */
@@ -293,34 +313,67 @@ export default function ResourcesPage() {
     <div>
       <PageHeader
         title="Resources"
-        description="A curated shelf of the guides, tools, and reads that actually help — with honest notes on what each one is good for."
+        description="The good stuff, pre-sorted — with honest notes so you know what's worth your time (and your money)."
       />
 
       <div className="space-y-10">
-        {SECTIONS.map((section) => (
-          <section key={section.title}>
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
-                <section.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold tracking-tight text-brand-900">
-                  {section.title}
-                </h2>
-                <p className="text-sm text-zinc-500">{section.subtitle}</p>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {section.items.map((item) =>
-                item.kind === "link" ? (
-                  <ResourceLinkCard key={item.name} item={item} />
-                ) : (
-                  <ResourceNoteCard key={item.name} item={item} />
-                )
-              )}
-            </div>
-          </section>
-        ))}
+        {/* ----- Free stuff ----- */}
+        <div>
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold tracking-tight text-brand-900">
+              Free stuff
+            </h2>
+            <p className="text-sm text-zinc-500">
+              Everything below costs exactly $0. Start (and honestly, mostly
+              finish) here.
+            </p>
+          </div>
+          <div className="space-y-10">
+            {FREE_SECTIONS.map((section) => (
+              <section key={section.title}>
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
+                    <section.icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-tight text-brand-900">
+                      {section.title}
+                    </h3>
+                    <p className="text-sm text-zinc-500">{section.subtitle}</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {section.items.map((item) =>
+                    item.kind === "link" ? (
+                      <ResourceLinkCard key={item.name} item={item} />
+                    ) : (
+                      <ResourceNoteCard key={item.name} item={item} />
+                    )
+                  )}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+
+        {/* ----- Paid (deliberately understated) ----- */}
+        <section className="border-t border-brand-100 pt-8">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold tracking-tight text-brand-900">
+              Worth paying for (only if you want)
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-zinc-500">
+              None of these are required. The free stuff above covers 90% of
+              it — but if you have the budget and want more structure, these
+              are the legit ones.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {PAID_ITEMS.map((item) => (
+              <ResourceLinkCard key={item.name} item={item} />
+            ))}
+          </div>
+        </section>
 
         {/* Closing tip */}
         <Card className="flex flex-col items-center gap-2 border-dashed bg-brand-50/60 p-8 text-center">

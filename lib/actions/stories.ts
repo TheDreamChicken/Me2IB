@@ -49,6 +49,7 @@ export async function upsertStory(formData: FormData): Promise<ActionResult> {
     answer: str(formData, "answer"),
     notes: str(formData, "notes"),
     strength: str(formData, "strength") ?? "draft",
+    firm: str(formData, "firm"),
     tags: (str(formData, "tags") ?? "")
       .split(",")
       .map((t) => t.trim())
@@ -115,6 +116,7 @@ export async function seedStarterQuestions(): Promise<ActionResult> {
       answer: null,
       notes: null,
       strength: "draft",
+      firm: null,
       tags: [] as string[],
     })
   );
