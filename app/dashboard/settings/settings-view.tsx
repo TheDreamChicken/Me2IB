@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Palette } from "lucide-react";
 import { Card, PageHeader, cn } from "@/components/ui";
 
+// Ordered as light/dark pairs — each light theme has a darker sibling.
 const THEMES = [
   {
     value: "lavender",
@@ -14,7 +15,7 @@ const THEMES = [
   {
     value: "dark",
     label: "Midnight",
-    hint: "Dark gray & black with deep purple.",
+    hint: "Lavender's night owl — charcoal & deep purple.",
     swatches: ["#0f0d14", "#7c5ce0", "#ece8f4"],
   },
   {
@@ -24,10 +25,22 @@ const THEMES = [
     swatches: ["#eff5ff", "#5f8df6", "#233a90"],
   },
   {
+    value: "deep",
+    label: "Deep End",
+    hint: "Ocean after dark — late-night navy.",
+    swatches: ["#0a0f1c", "#3f6ee0", "#e6ecf7"],
+  },
+  {
     value: "sage",
     label: "Sage",
     hint: "Earthy greens, easy on the eyes.",
     swatches: ["#f1f6ee", "#6a9a5c", "#2b4227"],
+  },
+  {
+    value: "forest",
+    label: "Forest",
+    hint: "Sage at midnight — mossy and cozy.",
+    swatches: ["#0e130f", "#4f8a55", "#e6efe4"],
   },
 ] as const;
 
@@ -73,7 +86,8 @@ export function SettingsView() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Two columns so each row is a light theme + its darker sibling */}
+        <div className="grid gap-3 sm:grid-cols-2">
           {THEMES.map((t) => {
             const active = theme === t.value;
             return (
