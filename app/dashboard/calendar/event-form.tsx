@@ -15,6 +15,7 @@ import {
 import {
   addDaysKey,
   dateKeyOf,
+  normalizedEventType,
   timeOf,
   todayKey,
   type ApplicationLite,
@@ -38,6 +39,11 @@ export function EventForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [allDay, setAllDay] = useState(event?.all_day ?? false);
+  // Legacy rows may have a location without a location_type — treat those as
+  // in-person so the saved location stays visible (and editable) on edit.
+  const [locationType, setLocationType] = useState(
+    event?.location_type ?? (event?.location ? "in_person" : "")
+  );
 
   const start = event ? new Date(event.start_at) : null;
   const end = event?.end_at ? new Date(event.end_at) : null;
@@ -104,7 +110,12 @@ export function EventForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Event type">
-          <Select name="event_type" defaultValue={event?.event_type ?? "meeting"}>
+          <Select
+            name="event_type"
+            defaultValue={
+              event ? normalizedEventType(event.event_type) : "coffee_chat"
+            }
+          >
             {EVENT_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
@@ -164,13 +175,38 @@ export function EventForm({
         </Field>
       </div>
 
-      <Field label="Location">
-        <Input
-          name="location"
-          defaultValue={event?.location ?? ""}
-          placeholder="Zoom, campus café, firm HQ..."
-        />
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Where">
+          <Select
+            name="location_type"
+            value={locationType}
+            onChange={(e) => setLocationType(e.target.value)}
+          >
+            <option value="">—</option>
+            <option value="virtual">Virtual</option>
+            <option value="in_person">In person</option>
+          </Select>
+        </Field>
+        {locationType === "virtual" && (
+          <Field label="Meeting link">
+            <Input
+              name="meeting_link"
+              type="url"
+              defaultValue={event?.meeting_link ?? ""}
+              placeholder="https://zoom.us/j/..."
+            />
+          </Field>
+        )}
+        {locationType === "in_person" && (
+          <Field label="Location">
+            <Input
+              name="location"
+              defaultValue={event?.location ?? ""}
+              placeholder="Campus café, firm HQ..."
+            />
+          </Field>
+        )}
+      </div>
 
       <Field label="Description">
         <Textarea name="description" defaultValue={event?.description ?? ""} />

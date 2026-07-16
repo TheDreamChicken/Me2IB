@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Briefcase, CheckCircle2, Clock, MapPin, Users } from "lucide-react";
+import { Briefcase, CheckCircle2, Clock, MapPin, Users, Video } from "lucide-react";
 import type { CalendarEvent } from "@/lib/types";
-import { EVENT_TYPES, labelFor } from "@/lib/constants";
 import { deleteEvent, toggleEventComplete } from "@/lib/actions/events";
 import { Badge, Button, DeleteButton, Spinner, cn } from "@/components/ui";
 import {
@@ -11,6 +10,7 @@ import {
   formatDayKey,
   formatEventTime,
   typeColor,
+  typeLabel,
   type ApplicationLite,
   type ContactLite,
 } from "./calendar-utils";
@@ -39,8 +39,37 @@ export function EventDetail({
   });
   const timeLabel = formatEventTime(event);
 
-  const infoRows: { icon: React.ElementType; label: string; value: string | null }[] = [
-    { icon: MapPin, label: "Location", value: event.location },
+  // Virtual events get a clickable "Join link"; only http(s) links are
+  // rendered as anchors — anything else falls back to plain text.
+  const isVirtual = event.location_type === "virtual";
+  const clickableLink =
+    isVirtual && event.meeting_link && /^https?:\/\//i.test(event.meeting_link)
+      ? event.meeting_link
+      : null;
+  const whereRow: { icon: React.ElementType; label: string; value: React.ReactNode } | null =
+    isVirtual && event.meeting_link
+      ? {
+          icon: Video,
+          label: "Virtual",
+          value: clickableLink ? (
+            <a
+              href={clickableLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand-600 underline underline-offset-2 hover:text-brand-800"
+            >
+              Join link
+            </a>
+          ) : (
+            event.meeting_link
+          ),
+        }
+      : event.location
+        ? { icon: MapPin, label: "Location", value: event.location }
+        : null;
+
+  const infoRows: { icon: React.ElementType; label: string; value: React.ReactNode }[] = [
+    ...(whereRow ? [whereRow] : []),
     {
       icon: Users,
       label: "Contact",
@@ -63,7 +92,7 @@ export function EventDetail({
       <div className="rounded-2xl bg-gradient-to-br from-brand-100 via-brand-50 to-white p-5">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className={typeColor(event.event_type)}>
-            {labelFor(EVENT_TYPES, event.event_type)}
+            {typeLabel(event.event_type)}
           </Badge>
           {event.source === "smart" && (
             <Badge className="bg-brand-50 text-brand-600">Smart suggestion</Badge>

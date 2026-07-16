@@ -29,6 +29,12 @@ export async function upsertEvent(formData: FormData): Promise<ActionResult> {
   if (!start_at) return { error: "A date is required." };
 
   const allDayRaw = String(formData.get("all_day") ?? "");
+  // Only the two known values are persisted; anything else becomes null.
+  const locationTypeRaw = str(formData, "location_type");
+  const location_type =
+    locationTypeRaw === "virtual" || locationTypeRaw === "in_person"
+      ? locationTypeRaw
+      : null;
   const payload = {
     title,
     description: str(formData, "description"),
@@ -37,6 +43,8 @@ export async function upsertEvent(formData: FormData): Promise<ActionResult> {
     end_at: str(formData, "end_at"),
     all_day: allDayRaw === "on" || allDayRaw === "true",
     location: str(formData, "location"),
+    location_type,
+    meeting_link: str(formData, "meeting_link"),
     contact_id: str(formData, "contact_id"),
     application_id: str(formData, "application_id"),
     source: str(formData, "source") ?? "manual",

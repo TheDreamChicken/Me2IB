@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { CalendarDays, Clock, Lightbulb, Plus } from "lucide-react";
+import { CalendarDays, Clock, History, Lightbulb, Plus } from "lucide-react";
 import type { CalendarEvent } from "@/lib/types";
-import { EVENT_TYPES, labelFor } from "@/lib/constants";
 import { toggleEventComplete, upsertEvent } from "@/lib/actions/events";
 import {
   Badge,
@@ -23,6 +22,7 @@ import {
   formatEventTime,
   todayKey,
   typeColor,
+  typeLabel,
   type ApplicationLite,
   type ContactLite,
   type Suggestion,
@@ -97,7 +97,7 @@ function EventRow({
         </p>
       </div>
       <Badge className={cn("shrink-0", typeColor(event.event_type))}>
-        {labelFor(EVENT_TYPES, event.event_type)}
+        {typeLabel(event.event_type)}
       </Badge>
     </div>
   );
@@ -161,6 +161,22 @@ export function CalendarView({
     });
   }, [events, today]);
 
+  // Past 14 days, most recent first — a tick-off list of what already
+  // happened. All-day events only count once their day is fully over.
+  const recentlyWrapped = useMemo(() => {
+    if (!now || !today) return [];
+    const floor = addDaysKey(today, -14);
+    return events
+      .filter((e) => {
+        const k = eventDayKey(e);
+        if (k < floor || k > today) return false;
+        if (e.all_day) return k < today;
+        return new Date(e.start_at).getTime() < now.getTime();
+      })
+      .sort((a, b) => +new Date(b.start_at) - +new Date(a.start_at))
+      .slice(0, 8);
+  }, [events, now, today]);
+
   const suggestions = useMemo(
     () => (now ? buildSuggestions(events, contacts, applications) : []),
     [now, events, contacts, applications]
@@ -214,7 +230,7 @@ export function CalendarView({
     <div>
       <PageHeader
         title="Calendar"
-        description="Every deadline, interview, and coffee chat in one cozy schedule."
+        description="Interviews, deadlines, coffee chats — all hanging out in one place so your brain doesn't have to hold them."
         action={
           <Button onClick={() => setAddDate(todayKey())}>
             <Plus className="h-4 w-4" /> Add event
@@ -281,6 +297,43 @@ export function CalendarView({
             ) : (
               <div className="space-y-2">
                 {upcoming.map((e) => (
+                  <EventRow
+                    key={e.id}
+                    event={e}
+                    contact={contactFor(e)}
+                    application={applicationFor(e)}
+                    today={today}
+                    toggling={togglingId === e.id}
+                    onOpen={() => setSelectedId(e.id)}
+                    onToggle={() => toggle(e)}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold text-brand-900">
+                <History className="h-4 w-4 text-brand-400" />
+                Recently wrapped — past 14 days
+              </h2>
+              <span suppressHydrationWarning className="text-xs text-zinc-400">
+                {recentlyWrapped.length} event
+                {recentlyWrapped.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {recentlyWrapped.length === 0 ? (
+              // Until mounted we don't know the viewer's "now" — stay neutral.
+              now && (
+                <p className="rounded-xl border border-dashed border-brand-200 bg-brand-50/50 p-5 text-center text-sm text-zinc-400">
+                  Nothing in the books yet — future you will enjoy the
+                  receipts.
+                </p>
+              )
+            ) : (
+              <div className="space-y-2">
+                {recentlyWrapped.map((e) => (
                   <EventRow
                     key={e.id}
                     event={e}

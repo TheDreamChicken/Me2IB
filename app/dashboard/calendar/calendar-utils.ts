@@ -1,7 +1,7 @@
 // Shared types + date helpers + rule-based suggestion engine for the calendar.
 
 import type { Application, CalendarEvent, Contact } from "@/lib/types";
-import { EVENT_TYPES } from "@/lib/constants";
+import { EVENT_TYPES, eventTypeInfo } from "@/lib/constants";
 import { daysSinceTouch, followupDelta, isOverdue } from "@/lib/contact-utils";
 
 /* ------------------------------------------------------------------ */
@@ -89,10 +89,22 @@ export function formatEventTime(e: CalendarEvent): string | null {
 }
 
 export function typeColor(type: string): string {
-  return (
-    EVENT_TYPES.find((t) => t.value === type)?.color ??
-    "bg-zinc-100 text-zinc-600 border-zinc-200"
-  );
+  return eventTypeInfo(type).color;
+}
+
+export function typeLabel(type: string): string {
+  return eventTypeInfo(type).label;
+}
+
+/**
+ * Canonical picker value for an event type. Legacy values (networking,
+ * meeting) resolve to the current EVENT_TYPES entry with the same label so
+ * the edit form pre-selects something the picker actually offers.
+ */
+export function normalizedEventType(type: string): string {
+  const info = eventTypeInfo(type);
+  if (EVENT_TYPES.some((t) => t.value === info.value)) return info.value;
+  return EVENT_TYPES.find((t) => t.label === info.label)?.value ?? "other";
 }
 
 /* ------------------------------------------------------------------ */

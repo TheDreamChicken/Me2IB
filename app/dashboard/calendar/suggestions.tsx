@@ -1,12 +1,12 @@
 "use client";
 
 import { CheckCircle2, Lightbulb, Plus, Sparkles } from "lucide-react";
-import { EVENT_TYPES, labelFor } from "@/lib/constants";
 import { Badge, Button, Card, Spinner } from "@/components/ui";
 import {
   formatDayKey,
   todayKey,
   typeColor,
+  typeLabel,
   type Suggestion,
 } from "./calendar-utils";
 
@@ -65,7 +65,7 @@ export function SuggestionsPanel({
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-400">
                   <Badge className={typeColor(s.event_type)}>
-                    {labelFor(EVENT_TYPES, s.event_type)}
+                    {typeLabel(s.event_type)}
                   </Badge>
                   <span>
                     {s.date === today ? "Today" : formatDayKey(s.date)} ·{" "}
