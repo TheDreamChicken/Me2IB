@@ -248,7 +248,7 @@ export function ApplicationsView({
     <div>
       <PageHeader
         title="Applications"
-        description="Every application, one pipeline. Stay on top of deadlines and keep things moving."
+        description="Every role you're chasing, all in one spot. Toss them in as you find them — we'll keep an eye on the deadlines so nothing sneaks up on you."
         action={
           <Button onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" /> Add application
@@ -414,7 +414,6 @@ export function ApplicationsView({
         open={adding}
         onClose={() => setAdding(false)}
         title="Add application"
-        wide
       >
         <ApplicationForm
           application={null}
@@ -428,7 +427,6 @@ export function ApplicationsView({
         open={!!editing}
         onClose={() => setEditing(null)}
         title="Edit application"
-        wide
       >
         {editing && (
           <ApplicationForm
