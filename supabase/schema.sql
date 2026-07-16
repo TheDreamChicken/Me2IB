@@ -375,3 +375,23 @@ create policy "documents_bucket_update_own" on storage.objects for update
 drop policy if exists "documents_bucket_delete_own" on storage.objects;
 create policy "documents_bucket_delete_own" on storage.objects for delete
   using (bucket_id = 'documents' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ============================================================
+-- Iteration 1 additions (idempotent — safe to re-run)
+-- ============================================================
+
+-- Profiles: subscription tier + multi-major/minor/certificates
+alter table public.profiles add column if not exists tier text default 'free';
+alter table public.profiles add column if not exists majors text[] default '{}';
+alter table public.profiles add column if not exists minors text[] default '{}';
+alter table public.profiles add column if not exists certificates text[] default '{}';
+
+-- Stories: optional firm tag for firm-specific answers
+alter table public.stories add column if not exists firm text;
+
+-- Events: virtual vs in-person + meeting link
+alter table public.events add column if not exists location_type text; -- 'virtual' | 'in_person'
+alter table public.events add column if not exists meeting_link text;
+
+-- Experiences: optional external link (portfolio, doc, repo...)
+alter table public.experiences add column if not exists link text;

@@ -318,11 +318,11 @@ export function Modal({
       <div
         ref={panelRef}
         className={cn(
-          "animate-fade-up my-8 w-full rounded-2xl border border-brand-100 bg-white p-6 card-shadow",
+          "animate-fade-up my-4 flex max-h-[calc(100dvh-4rem)] w-full flex-col rounded-2xl border border-brand-100 bg-white card-shadow sm:my-8",
           wide ? "max-w-3xl" : "max-w-xl"
         )}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-2">
           {title && (
             <h2 className="text-lg font-semibold text-brand-900">{title}</h2>
           )}
@@ -334,7 +334,10 @@ export function Modal({
             <X className="h-5 w-5" />
           </button>
         </div>
-        {children}
+        {/* Internal scroll so long forms never cut off the viewport */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-2">
+          {children}
+        </div>
       </div>
     </div>
   );

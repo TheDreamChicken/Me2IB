@@ -16,7 +16,9 @@ import {
   BookOpenText,
   MessageSquareText,
   MessagesSquare,
+  MessageCircleQuestion,
   CircleUserRound,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -32,7 +34,7 @@ const NAV_SECTIONS: {
     items: [{ href: "/dashboard", label: "Overview", icon: LayoutDashboard }],
   },
   {
-    heading: "Pipeline",
+    heading: "Keep tabs",
     items: [
       { href: "/dashboard/contacts", label: "Contacts", icon: Users },
       { href: "/dashboard/applications", label: "Applications", icon: Briefcase },
@@ -41,7 +43,7 @@ const NAV_SECTIONS: {
     ],
   },
   {
-    heading: "Prepare",
+    heading: "Level up",
     items: [
       { href: "/dashboard/plan", label: "My Plan", icon: Map },
       { href: "/dashboard/documents", label: "Documents", icon: FileText },
@@ -55,6 +57,8 @@ const NAV_SECTIONS: {
     heading: "More",
     items: [
       { href: "/dashboard/chat", label: "AI Chat", icon: MessagesSquare },
+      { href: "/faq", label: "Recruiting FAQ", icon: MessageCircleQuestion },
+      { href: "/dashboard/settings", label: "Settings", icon: Settings },
       { href: "/dashboard/account", label: "Account", icon: CircleUserRound },
     ],
   },
@@ -189,6 +193,9 @@ export function Sidebar({
           <Link href="/dashboard" className="text-xl font-bold text-brand-800">
             me2<span className="text-brand-500">IB</span>
           </Link>
+          <p className="mt-0.5 text-[11px] text-zinc-400">
+            keep track of the chaos
+          </p>
         </div>
         <NavLinks />
         {userBlock}

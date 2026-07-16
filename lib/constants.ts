@@ -91,14 +91,26 @@ export const MATERIAL_STATUSES = [
 
 export const EVENT_TYPES = [
   { value: "interview", label: "Interview", color: "bg-purple-100 text-purple-700 border-purple-200" },
-  { value: "coffee_chat", label: "Coffee chat", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  { value: "networking", label: "Networking", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  { value: "info_session", label: "Info session", color: "bg-cyan-100 text-cyan-700 border-cyan-200" },
+  { value: "coffee_chat", label: "Coffee Chat", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  { value: "info_session", label: "Info Session", color: "bg-cyan-100 text-cyan-700 border-cyan-200" },
   { value: "deadline", label: "Deadline", color: "bg-rose-100 text-rose-600 border-rose-200" },
-  { value: "meeting", label: "Meeting", color: "bg-blue-100 text-blue-700 border-blue-200" },
   { value: "followup", label: "Follow-up", color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
   { value: "other", label: "Other", color: "bg-zinc-100 text-zinc-600 border-zinc-200" },
 ] as const;
+
+// Legacy event types (removed from the picker; old rows still render nicely)
+export const LEGACY_EVENT_TYPES = [
+  { value: "networking", label: "Coffee Chat", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  { value: "meeting", label: "Coffee Chat", color: "bg-amber-100 text-amber-700 border-amber-200" },
+] as const;
+
+export function eventTypeInfo(value: string | null | undefined) {
+  return (
+    EVENT_TYPES.find((t) => t.value === value) ??
+    LEGACY_EVENT_TYPES.find((t) => t.value === value) ??
+    EVENT_TYPES[EVENT_TYPES.length - 1]
+  );
+}
 
 export const CONNECTION_STRENGTHS = [
   { value: 1, label: "Just met" },
@@ -144,7 +156,12 @@ export const STANDINGS = [
   { value: "junior", label: "Junior (3rd year)" },
   { value: "senior", label: "Senior (4th year)" },
   { value: "masters", label: "Master's student" },
-  { value: "standard", label: "Standard student (figure it out for me)" },
+] as const;
+
+export const TIER_LEVELS = [
+  { value: "free", label: "Free", color: "bg-zinc-100 text-zinc-600" },
+  { value: "plus", label: "Plus", color: "bg-brand-100 text-brand-700" },
+  { value: "pro", label: "Pro", color: "bg-amber-100 text-amber-700" },
 ] as const;
 
 export function labelFor(

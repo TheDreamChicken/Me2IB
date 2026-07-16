@@ -36,6 +36,106 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/* ================================================================
+   Themes — set via data-theme on <html> (persisted in localStorage,
+   picked in Dashboard -> Settings). Default (no attribute) = lavender.
+   Tailwind v4 utilities read var(--color-brand-*), so overriding the
+   scale re-skins every brand-colored element.
+   ================================================================ */
+
+/* ---- Midnight: gray/black, white text, deeper purple ---- */
+[data-theme="dark"] {
+  --background: #0f0d14;
+  --foreground: #ece8f4;
+  --color-brand-50: #201a31;
+  --color-brand-100: #2a2342;
+  --color-brand-200: #3b3159;
+  --color-brand-300: #55478a;
+  --color-brand-400: #9a83e0;
+  --color-brand-500: #8b6cf0;
+  --color-brand-600: #7c5ce0;
+  --color-brand-700: #c4b2f5;
+  --color-brand-800: #ddd3fa;
+  --color-brand-900: #efeaff;
+}
+[data-theme="dark"] body {
+  background:
+    radial-gradient(900px 400px at 85% -10%, rgba(124, 92, 224, 0.14), transparent 60%),
+    radial-gradient(700px 350px at 0% 0%, rgba(90, 70, 160, 0.12), transparent 55%),
+    linear-gradient(180deg, #141020 0%, #0f0d14 340px);
+}
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-white\/60,
+[data-theme="dark"] .bg-white\/70,
+[data-theme="dark"] .bg-white\/80,
+[data-theme="dark"] .bg-white\/85,
+[data-theme="dark"] .bg-white\/90 {
+  background-color: #191424;
+}
+[data-theme="dark"] .text-zinc-400 { color: #8d84a8; }
+[data-theme="dark"] .text-zinc-500 { color: #a99fc0; }
+[data-theme="dark"] .text-zinc-600 { color: #b6adcb; }
+[data-theme="dark"] .bg-zinc-100 { background-color: #2a2438; }
+[data-theme="dark"] .hover\:bg-zinc-100:hover { background-color: #2a2438; }
+[data-theme="dark"] .bg-rose-50 { background-color: #3a1f2b; }
+[data-theme="dark"] .bg-amber-50 { background-color: #362a17; }
+[data-theme="dark"] .bg-emerald-50 { background-color: #16301f; }
+[data-theme="dark"] .bg-amber-100 { background-color: #3d301f; }
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder { color: #6f6588; }
+[data-theme="dark"] .card-shadow {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.35);
+}
+[data-theme="dark"] .prose-cozy h1,
+[data-theme="dark"] .prose-cozy h2,
+[data-theme="dark"] .prose-cozy h3,
+[data-theme="dark"] .prose-cozy strong { color: #e6def7; }
+[data-theme="dark"] .prose-cozy code { background: #2a2342; }
+
+/* ---- Ocean: blue with white faded gradient ---- */
+[data-theme="blue"] {
+  --foreground: #253049;
+  --color-brand-50: #f5f9ff;
+  --color-brand-100: #e9f1ff;
+  --color-brand-200: #d6e5ff;
+  --color-brand-300: #b7d1fe;
+  --color-brand-400: #8bb0fb;
+  --color-brand-500: #5f8df6;
+  --color-brand-600: #3d6eec;
+  --color-brand-700: #2f56d4;
+  --color-brand-800: #2a49b2;
+  --color-brand-900: #233a90;
+}
+[data-theme="blue"] body {
+  background:
+    radial-gradient(900px 400px at 85% -10%, rgba(120, 165, 250, 0.2), transparent 60%),
+    radial-gradient(700px 350px at 0% 0%, rgba(95, 141, 246, 0.12), transparent 55%),
+    linear-gradient(180deg, #eff5ff 0%, #ffffff 340px);
+}
+
+/* ---- Sage: earthy greens, darker ink ---- */
+[data-theme="sage"] {
+  --foreground: #26312a;
+  --color-brand-50: #f4f8f3;
+  --color-brand-100: #e7f0e4;
+  --color-brand-200: #d2e3cc;
+  --color-brand-300: #b3cfa9;
+  --color-brand-400: #8bb37e;
+  --color-brand-500: #6a9a5c;
+  --color-brand-600: #52814a;
+  --color-brand-700: #42683c;
+  --color-brand-800: #365431;
+  --color-brand-900: #2b4227;
+}
+[data-theme="sage"] body {
+  background:
+    radial-gradient(900px 400px at 85% -10%, rgba(139, 179, 126, 0.18), transparent 60%),
+    radial-gradient(700px 350px at 0% 0%, rgba(106, 154, 92, 0.1), transparent 55%),
+    linear-gradient(180deg, #f1f6ee 0%, #fdfffc 340px);
+}
+
 /* Cozy card shadow */
 .card-shadow {
   box-shadow:

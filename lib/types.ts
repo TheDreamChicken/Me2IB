@@ -19,6 +19,10 @@ export type Profile = {
   professional_summary: string | null;
   personal_interests: string | null;
   fun_facts: string | null;
+  tier: string | null;
+  majors: string[];
+  minors: string[];
+  certificates: string[];
   created_at: string;
   updated_at: string;
 };
@@ -94,6 +98,8 @@ export type CalendarEvent = {
   end_at: string | null;
   all_day: boolean;
   location: string | null;
+  location_type: string | null; // 'virtual' | 'in_person'
+  meeting_link: string | null;
   contact_id: string | null;
   application_id: string | null;
   completed: boolean;
@@ -135,6 +141,7 @@ export type Experience = {
   description: string | null;
   bullets: string | null;
   skills: string[];
+  link: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -148,6 +155,7 @@ export type Story = {
   notes: string | null;
   strength: string;
   tags: string[];
+  firm: string | null;
   created_at: string;
   updated_at: string;
 };
