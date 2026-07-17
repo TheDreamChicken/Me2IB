@@ -32,7 +32,8 @@ export type PracticeTabValue =
   | "behavioral"
   | "terms"
   | "mathgym"
-  | "online";
+  | "online"
+  | "ai";
 
 export type PracticeTabMeta = {
   value: PracticeTabValue;
@@ -553,13 +554,19 @@ export const PRACTICE_TABS: PracticeTabMeta[] = [
     value: "mathgym",
     label: "Math Gym",
     intro:
-      "Fast, calm arithmetic is a trainable skill, and interviewers can tell who's been training. Sixty seconds, no calculator — see what you've got.",
+      "Fast, calm arithmetic is a trainable skill, and interviewers can tell who's been training. Four timed modes, no calculator, every question built fresh — see what you've got.",
   },
   {
     value: "online",
     label: "Online Interviews",
     intro:
       "One-way video screens and the weird little assessment games firms run before a human ever sees you. Much less scary once you know exactly what's coming.",
+  },
+  {
+    value: "ai",
+    label: "AI Practice",
+    intro:
+      "A locked preview of what's next: endless AI-built question sets tuned to whatever you're drilling. Poke the controls — the brain gets plugged in soon.",
   },
 ];
 

@@ -1,7 +1,8 @@
 "use client";
 
-// Math Gym: a built-in 60-second mental math sprint (no deps), plus honest
-// links to external trainers. Personal best persists in localStorage.
+// Math Gym: four procedurally-generated timed rounds (drills, big numbers,
+// word problems, table reading) plus honest links to external trainers.
+// Personal bests persist per mode+difficulty in localStorage.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -12,91 +13,60 @@ import {
   PartyPopper,
   Play,
   RotateCcw,
+  Settings2,
   Trophy,
   X,
+  XCircle,
   Zap,
 } from "lucide-react";
 import { Button, Card, cn } from "@/components/ui";
+import {
+  DIFFICULTIES,
+  MODES,
+  isCorrect,
+  makeGymQuestion,
+  type Difficulty,
+  type GymMode,
+  type GymQuestion,
+  type TableData,
+} from "./gym-generators";
 
 const BEST_KEY = "me2ib-mathgym-best";
-const ROUND_SECONDS = 60;
 
-type Difficulty = "chill" | "locked";
 type Phase = "idle" | "running" | "done";
-type Question = { prompt: string; answer: number };
-type Bests = Record<Difficulty, number>;
+/** Personal bests, keyed `${mode}-${difficulty}` ("drills-chill", "tables-locked"…). */
+type Bests = Record<string, number>;
 
-const DIFFICULTIES: {
-  value: Difficulty;
-  label: string;
-  blurb: string;
-}[] = [
-  { value: "chill", label: "Chill", blurb: "friendlier numbers" },
-  { value: "locked", label: "Locked in", blurb: "bigger, meaner numbers" },
-];
-
-/* ------------------------------------------------------------------ */
-/* Question generation                                                 */
-/* ------------------------------------------------------------------ */
-
-function randInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function makeQuestion(difficulty: Difficulty): Question {
-  const hard = difficulty === "locked";
-  const kind = randInt(0, 3);
-
-  if (kind === 0) {
-    // 2-digit addition
-    const a = hard ? randInt(25, 99) : randInt(11, 49);
-    const b = hard ? randInt(25, 99) : randInt(11, 49);
-    return { prompt: `${a} + ${b}`, answer: a + b };
-  }
-  if (kind === 1) {
-    // 2-digit subtraction, non-negative result
-    let a = hard ? randInt(25, 99) : randInt(11, 49);
-    let b = hard ? randInt(25, 99) : randInt(11, 49);
-    if (b > a) [a, b] = [b, a];
-    return { prompt: `${a} − ${b}`, answer: a - b };
-  }
-  if (kind === 2) {
-    // 2-digit × 1-digit; locked-in sometimes serves a small 2×2
-    if (hard && Math.random() < 0.25) {
-      const a = randInt(11, 25);
-      const b = randInt(11, 19);
-      return { prompt: `${a} × ${b}`, answer: a * b };
-    }
-    const a = hard ? randInt(12, 99) : randInt(11, 29);
-    const b = hard ? randInt(3, 9) : randInt(2, 6);
-    return { prompt: `${a} × ${b}`, answer: a * b };
-  }
-  // clean division: build it from divisor × quotient
-  const divisor = hard ? randInt(3, 12) : randInt(2, 9);
-  const quotient = hard ? randInt(4, 19) : randInt(2, 9);
-  return { prompt: `${divisor * quotient} ÷ ${divisor}`, answer: quotient };
+function bestKeyFor(mode: GymMode, difficulty: Difficulty) {
+  return `${mode}-${difficulty}`;
 }
 
 /* ------------------------------------------------------------------ */
-/* Personal best storage                                               */
+/* Personal best storage (migrates legacy shapes gracefully)           */
 /* ------------------------------------------------------------------ */
 
-function readBests(): Bests {
+export function readBests(): Bests {
   try {
     const raw = localStorage.getItem(BEST_KEY);
-    if (!raw) return { chill: 0, locked: 0 };
+    if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed === "number") {
-      // legacy plain-number format
-      return { chill: parsed, locked: parsed };
+      // oldest format: a single plain number (the drills best)
+      return { "drills-chill": parsed, "drills-locked": parsed };
     }
-    const obj = parsed as Partial<Record<Difficulty, unknown>>;
-    return {
-      chill: typeof obj.chill === "number" ? obj.chill : 0,
-      locked: typeof obj.locked === "number" ? obj.locked : 0,
-    };
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Bests = {};
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof v !== "number") continue;
+        // legacy format: { chill, locked } meant the drills sprint
+        const key = k === "chill" || k === "locked" ? `drills-${k}` : k;
+        out[key] = Math.max(out[key] ?? 0, v);
+      }
+      return out;
+    }
+    return {};
   } catch {
-    return { chill: 0, locked: 0 };
+    return {};
   }
 }
 
@@ -149,28 +119,83 @@ function Confetti() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Exhibit table (Tables mode)                                         */
+/* ------------------------------------------------------------------ */
+
+function ExhibitTable({ table }: { table: TableData }) {
+  return (
+    <div className="mx-auto mt-4 w-full max-w-md overflow-x-auto">
+      <div className="min-w-[18rem] overflow-hidden rounded-xl border border-brand-100 bg-white">
+        <table className="w-full border-collapse text-xs sm:text-sm">
+          <thead className="bg-brand-50">
+            <tr>
+              {table.columns.map((c, i) => (
+                <th
+                  key={c}
+                  className={cn(
+                    "px-3 py-2 font-semibold text-brand-800",
+                    i === 0 ? "text-left" : "text-right"
+                  )}
+                >
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-brand-100">
+            {table.rows.map((r) => (
+              <tr key={r.label}>
+                <td className="px-3 py-1.5 text-left font-medium text-brand-900">
+                  {r.label}
+                </td>
+                {r.values.map((v, i) => (
+                  <td
+                    key={i}
+                    className="px-3 py-1.5 text-right tabular-nums text-zinc-600"
+                  >
+                    {v}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* The game                                                            */
 /* ------------------------------------------------------------------ */
 
 function MathSprint() {
   const [phase, setPhase] = useState<Phase>("idle");
+  const [mode, setMode] = useState<GymMode>("drills");
   const [difficulty, setDifficulty] = useState<Difficulty>("chill");
-  const [question, setQuestion] = useState<Question | null>(null);
+  const [question, setQuestion] = useState<GymQuestion | null>(null);
   const [value, setValue] = useState("");
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [answered, setAnswered] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(ROUND_SECONDS);
-  const [bests, setBests] = useState<Bests>({ chill: 0, locked: 0 });
+  const [timeLeft, setTimeLeft] = useState(MODES[0].seconds);
+  const [bests, setBests] = useState<Bests>({});
   const [newBest, setNewBest] = useState(false);
   const [lastResult, setLastResult] = useState<{
     ok: boolean;
     text: string;
   } | null>(null);
+  // Word/Tables only: brief "here's the right answer" flash after a miss.
+  const [feedback, setFeedback] = useState<{ text: string } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const endAtRef = useRef(0);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const modeMeta = MODES.find((m) => m.value === mode) ?? MODES[0];
+  const roundSeconds = modeMeta.seconds;
+  const diffLabel = difficulty === "chill" ? "Chill" : "Locked in";
 
   // localStorage is browser-only — read after mount.
   useEffect(() => {
@@ -188,21 +213,49 @@ function MathSprint() {
     return () => clearInterval(id);
   }, [phase]);
 
-  // Save personal best when a round ends.
+  // Escape ends the round early (same as the End round button).
+  useEffect(() => {
+    if (phase !== "running") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPhase("done");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase]);
+
+  // Cancel any pending wrong-answer flash when the round stops / unmounts.
+  // (Stale `feedback` state is harmless — it's only rendered while running,
+  // and start() resets it before every round.)
+  useEffect(() => {
+    if (phase === "running") return;
+    if (feedbackTimerRef.current) {
+      clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = null;
+    }
+  }, [phase]);
+  useEffect(
+    () => () => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    },
+    []
+  );
+
+  // Save personal best (per mode+difficulty) when a round ends.
   useEffect(() => {
     if (phase !== "done") return;
+    const key = bestKeyFor(mode, difficulty);
     const prev = readBests();
-    if (score > prev[difficulty]) {
-      const next = { ...prev, [difficulty]: score };
+    if (score > (prev[key] ?? 0)) {
+      const next = { ...prev, [key]: score };
       try {
         localStorage.setItem(BEST_KEY, JSON.stringify(next));
       } catch {
         // storage unavailable — best just won't persist
       }
       setBests(next);
-      setNewBest(prev[difficulty] > 0); // celebrate beating a real previous best
+      setNewBest((prev[key] ?? 0) > 0); // celebrate beating a real previous best
     }
-  }, [phase, score, difficulty]);
+  }, [phase, score, mode, difficulty]);
 
   function start() {
     setScore(0);
@@ -211,70 +264,163 @@ function MathSprint() {
     setAnswered(0);
     setNewBest(false);
     setLastResult(null);
-    setQuestion(makeQuestion(difficulty));
+    setFeedback(null);
+    setQuestion(makeGymQuestion(mode, difficulty));
     setValue("");
-    endAtRef.current = Date.now() + ROUND_SECONDS * 1000;
-    setTimeLeft(ROUND_SECONDS);
+    endAtRef.current = Date.now() + roundSeconds * 1000;
+    setTimeLeft(roundSeconds);
     setPhase("running");
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
+  function endRound() {
+    setPhase("done");
+  }
+
+  function filterInput(raw: string) {
+    if (question?.kind === "text") {
+      return raw.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 3);
+    }
+    if (mode === "drills") return raw.replace(/[^\d-]/g, "");
+    // big-number-friendly: digits plus commas, spaces, $, dots, k/m/b
+    return raw.replace(/[^\d\s,.$kKmMbB-]/g, "");
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (phase !== "running" || !question) return;
+    if (phase !== "running" || !question || feedback) return;
     const trimmed = value.trim();
     if (trimmed === "" || trimmed === "-") return;
 
-    const ok = Number(trimmed) === question.answer;
+    const ok = isCorrect(question, trimmed);
+    const showsFlash = mode === "word" || mode === "tables";
     setAnswered((a) => a + 1);
+
     if (ok) {
       const nextStreak = streak + 1;
       setScore((s) => s + 1);
       setStreak(nextStreak);
       if (nextStreak > bestStreak) setBestStreak(nextStreak);
-      setLastResult({ ok: true, text: `${question.prompt} = ${question.answer}` });
+      setLastResult({
+        ok: true,
+        text: showsFlash
+          ? `nailed it — ${question.answerText}`
+          : `${question.prompt} = ${question.answerText}`,
+      });
+    } else if (showsFlash) {
+      // Word problems & tables: pause ~1.2s and show the correct answer.
+      setStreak(0);
+      setLastResult(null);
+      setValue("");
+      setFeedback({ text: question.answerText });
+      feedbackTimerRef.current = setTimeout(() => {
+        feedbackTimerRef.current = null;
+        setFeedback(null);
+        setQuestion(makeGymQuestion(mode, difficulty));
+        inputRef.current?.focus();
+      }, 1200);
+      return;
     } else {
       setStreak(0);
-      setLastResult({ ok: false, text: `${question.prompt} = ${question.answer}` });
+      setLastResult({
+        ok: false,
+        text: `${question.prompt} = ${question.answerText}`,
+      });
     }
-    setQuestion(makeQuestion(difficulty));
+    setQuestion(makeGymQuestion(mode, difficulty));
     setValue("");
   }
 
   const running = phase === "running";
-  const timeFraction = timeLeft / ROUND_SECONDS;
-  const best = bests[difficulty];
+  const timeFraction = timeLeft / roundSeconds;
+  const best = bests[bestKeyFor(mode, difficulty)] ?? 0;
+  const sentenceMode = mode === "word" || mode === "tables";
+  const hint =
+    question?.note ?? (mode === "bignum" ? "shortcuts work: 2.4m, 350k" : null);
 
   return (
     <Card className="relative p-5 sm:p-6">
       {phase === "done" && newBest && <Confetti />}
 
-      {/* Difficulty toggle (locked while a round is live) */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-xl border border-brand-200 bg-white p-0.5">
-          {DIFFICULTIES.map((d) => (
-            <button
-              key={d.value}
-              type="button"
-              disabled={running}
-              onClick={() => setDifficulty(d.value)}
-              title={d.blurb}
-              className={cn(
-                "cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed",
-                difficulty === d.value
-                  ? "bg-brand-600 text-white shadow-sm"
-                  : "text-zinc-500 hover:text-brand-700"
-              )}
-            >
-              {d.label}
-            </button>
-          ))}
+      {/* Mode picker (setup only) */}
+      {phase === "idle" && (
+        <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {MODES.map((m) => {
+            const active = m.value === mode;
+            return (
+              <button
+                key={m.value}
+                type="button"
+                onClick={() => setMode(m.value)}
+                className={cn(
+                  "cursor-pointer rounded-xl border p-3 text-left transition-colors",
+                  active
+                    ? "border-brand-400 bg-brand-50 ring-1 ring-brand-300"
+                    : "border-brand-100 bg-white hover:border-brand-300"
+                )}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span
+                    className={cn(
+                      "text-sm font-semibold",
+                      active ? "text-brand-800" : "text-brand-900"
+                    )}
+                  >
+                    {m.label}
+                  </span>
+                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-brand-700">
+                    {m.seconds}s
+                  </span>
+                </span>
+                <span className="mt-1 block text-xs text-zinc-500">
+                  {m.blurb}
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <p className="flex items-center gap-1.5 text-xs text-zinc-400">
-          <Trophy className="h-3.5 w-3.5 text-brand-400" />
-          Personal best ({difficulty === "chill" ? "Chill" : "Locked in"}):{" "}
-          <span className="font-semibold text-brand-900">{best}</span>
-        </p>
+      )}
+
+      {/* Top row: difficulty (idle) / round summary chip, best, End round */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {phase === "idle" ? (
+          <div className="inline-flex rounded-xl border border-brand-200 bg-white p-0.5">
+            {DIFFICULTIES.map((d) => (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => setDifficulty(d.value)}
+                title={d.blurb}
+                className={cn(
+                  "cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                  difficulty === d.value
+                    ? "bg-brand-600 text-white shadow-sm"
+                    : "text-zinc-500 hover:text-brand-700"
+                )}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
+            <Dumbbell className="h-3.5 w-3.5" />
+            {modeMeta.label} · {diffLabel}
+          </span>
+        )}
+        <div className="flex items-center gap-2">
+          <p className="flex items-center gap-1.5 text-xs text-zinc-400">
+            <Trophy className="h-3.5 w-3.5 text-brand-400" />
+            Personal best ({modeMeta.label}, {diffLabel}):{" "}
+            <span className="font-semibold text-brand-900">{best}</span>
+          </p>
+          {running && (
+            <Button variant="ghost" size="sm" onClick={endRound}>
+              <XCircle className="h-3.5 w-3.5" />
+              End round
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Countdown bar */}
@@ -293,14 +439,10 @@ function MathSprint() {
           <div className="rounded-2xl bg-brand-100 p-3 text-brand-600">
             <Dumbbell className="h-6 w-6" />
           </div>
-          <p className="max-w-sm text-sm text-zinc-500">
-            60 seconds of +, −, ×, ÷. Type the answer, hit Enter, next one
-            appears instantly. Wrong answers cost you the streak, not the
-            clock.
-          </p>
+          <p className="max-w-md text-sm text-zinc-500">{modeMeta.idle}</p>
           <Button onClick={start} className="mt-1">
             <Play className="h-4 w-4" />
-            Start the sprint
+            Start the round
           </Button>
         </div>
       )}
@@ -332,41 +474,73 @@ function MathSprint() {
             </span>
           </div>
 
-          <p className="mt-6 text-center text-4xl font-semibold tracking-tight text-brand-900 tabular-nums">
+          <p
+            className={cn(
+              "mx-auto mt-6 text-center text-brand-900",
+              sentenceMode
+                ? "max-w-xl text-lg font-medium leading-relaxed sm:text-xl"
+                : "text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl"
+            )}
+          >
             {question.prompt}
           </p>
 
-          <form onSubmit={submit} className="mx-auto mt-5 max-w-[11rem]">
+          {question.table && <ExhibitTable table={question.table} />}
+
+          <form
+            onSubmit={submit}
+            className={cn(
+              "mx-auto mt-5",
+              mode === "drills" ? "max-w-[11rem]" : "max-w-[14rem]"
+            )}
+          >
             <input
               ref={inputRef}
               value={value}
-              onChange={(e) => setValue(e.target.value.replace(/[^\d-]/g, ""))}
-              inputMode="numeric"
+              onChange={(e) => setValue(filterInput(e.target.value))}
+              readOnly={!!feedback}
+              inputMode={mode === "drills" ? "numeric" : undefined}
               autoComplete="off"
               aria-label="Your answer"
               placeholder="= ?"
-              className="w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-center text-xl font-semibold text-brand-900 tabular-nums placeholder:text-zinc-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300"
+              className={cn(
+                "w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-center text-xl font-semibold text-brand-900 tabular-nums placeholder:text-zinc-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300",
+                feedback && "opacity-60"
+              )}
             />
           </form>
 
-          <p
-            className={cn(
-              "mt-3 flex min-h-5 items-center justify-center gap-1 text-center text-xs font-medium",
-              lastResult
-                ? lastResult.ok
-                  ? "text-emerald-600"
-                  : "text-rose-500"
-                : "text-transparent"
-            )}
-          >
-            {lastResult &&
-              (lastResult.ok ? (
-                <Check className="h-3.5 w-3.5" />
-              ) : (
-                <X className="h-3.5 w-3.5" />
-              ))}
-            {lastResult ? lastResult.text : "–"}
-          </p>
+          {hint && (
+            <p className="mt-1.5 text-center text-[11px] text-zinc-400">
+              {hint}
+            </p>
+          )}
+
+          {feedback ? (
+            <p className="animate-fade-up mt-3 flex min-h-5 items-center justify-center gap-1 text-center text-xs font-semibold text-rose-500">
+              <X className="h-3.5 w-3.5" />
+              The answer was {feedback.text}
+            </p>
+          ) : (
+            <p
+              className={cn(
+                "mt-3 flex min-h-5 items-center justify-center gap-1 text-center text-xs font-medium",
+                lastResult
+                  ? lastResult.ok
+                    ? "text-emerald-600"
+                    : "text-rose-500"
+                  : "text-transparent"
+              )}
+            >
+              {lastResult &&
+                (lastResult.ok ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <X className="h-3.5 w-3.5" />
+                ))}
+              {lastResult ? lastResult.text : "–"}
+            </p>
+          )}
         </div>
       )}
 
@@ -393,10 +567,22 @@ function MathSprint() {
             {answered} attempted · best streak {bestStreak} · personal best{" "}
             {best}
           </p>
-          <Button onClick={start} className="mt-1">
-            <RotateCcw className="h-4 w-4" />
-            Run it back
-          </Button>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+            <Button onClick={start}>
+              <RotateCcw className="h-4 w-4" />
+              Run it back
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setNewBest(false);
+                setPhase("idle");
+              }}
+            >
+              <Settings2 className="h-4 w-4" />
+              Change mode
+            </Button>
+          </div>
         </div>
       )}
     </Card>

@@ -9,6 +9,7 @@ import {
   Calculator,
   KeyRound,
   Landmark,
+  Lock,
   MessageSquareText,
   MonitorPlay,
   Sparkles,
@@ -19,6 +20,7 @@ import { ONLINE_ITEMS } from "./content-online";
 import { Accordion } from "./blocks";
 import { KeyTermsTab } from "./key-terms";
 import { MathGymTab } from "./math-gym";
+import { AiPracticeTab } from "./ai-practice";
 
 const TAB_ICONS: Record<PracticeTabValue, React.ElementType> = {
   finance: Landmark,
@@ -27,6 +29,7 @@ const TAB_ICONS: Record<PracticeTabValue, React.ElementType> = {
   terms: KeyRound,
   mathgym: Calculator,
   online: MonitorPlay,
+  ai: Lock,
 };
 
 /* ------------------------------------------------------------------ */
@@ -66,8 +69,8 @@ function MathGymJumpCard({ onOpen }: { onOpen: () => void }) {
           The arithmetic games are 100% trainable
         </p>
         <p className="text-sm text-zinc-500">
-          The 60-second sprints in the Math Gym are the closest thing to the
-          real assessment format — streaks, clock, and all.
+          The timed rounds in the Math Gym are the closest thing to the real
+          assessment format — streaks, clock, and all.
         </p>
       </div>
       <Button variant="secondary" size="sm" onClick={onOpen}>
@@ -196,11 +199,16 @@ export function PracticeView() {
             <MathGymJumpCard onOpen={() => setTab("mathgym")} />
           </>
         )}
+
+        {tab === "ai" && <AiPracticeTab />}
       </div>
 
-      <div className="mt-8">
-        <AiMockPlaceholder />
-      </div>
+      {/* The AI Practice tab has its own placeholder — don't stack two */}
+      {tab !== "ai" && (
+        <div className="mt-8">
+          <AiMockPlaceholder />
+        </div>
+      )}
     </div>
   );
 }
