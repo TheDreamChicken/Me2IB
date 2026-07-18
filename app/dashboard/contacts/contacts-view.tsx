@@ -50,6 +50,7 @@ import {
 /* ------------------------------------------------------------------ */
 
 function Avatar({ contact, size = "md" }: { contact: Contact; size?: "md" | "lg" }) {
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
   const initials = contact.name
     .split(/\s+/)
     .map((w) => w[0])
@@ -60,12 +61,14 @@ function Avatar({ contact, size = "md" }: { contact: Contact; size?: "md" | "lg"
     size === "lg"
       ? "h-16 w-16 text-xl rounded-2xl"
       : "h-10 w-10 text-sm rounded-xl";
-  return contact.photo_url ? (
+  return contact.photo_url && contact.photo_url !== failedPhotoUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={contact.photo_url}
       alt={contact.name}
       className={cn(cls, "shrink-0 object-cover")}
+      referrerPolicy="no-referrer"
+      onError={() => setFailedPhotoUrl(contact.photo_url)}
     />
   ) : (
     <div

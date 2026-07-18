@@ -6,7 +6,10 @@ import { LinkedInIcon } from "@/components/icons";
 import type { Contact } from "@/lib/types";
 import { CONNECTION_STRENGTHS, INDUSTRIES } from "@/lib/constants";
 import { upsertContact } from "@/lib/actions/contacts";
-import { callAI } from "@/lib/ai-client";
+import {
+  useLinkedInImport,
+  type FormState,
+} from "./use-linkedin-import";
 import {
   Button,
   Field,
@@ -85,54 +88,6 @@ function StartOption({
 /* Two-step add / edit form                                            */
 /* ------------------------------------------------------------------ */
 
-type FormState = {
-  name: string;
-  company: string;
-  position: string;
-  email: string;
-  phone: string;
-  linkedin_url: string;
-  photo_url: string;
-  location: string;
-  industry: string;
-  how_met: string;
-  connection_strength: string;
-  relationship: string;
-  shared_interests: string;
-  alma_mater: string;
-  notes: string;
-  tags: string;
-  last_contacted: string;
-  followup_interval_days: string;
-  status: string;
-};
-
-/** Fields the parse_contact AI task can return — keys map 1:1 to FormState. */
-const PARSE_KEYS = [
-  "name",
-  "company",
-  "position",
-  "location",
-  "industry",
-  "email",
-  "phone",
-  "linkedin_url",
-  "photo_url",
-  "alma_mater",
-  "shared_interests",
-  "relationship",
-] as const;
-
-type ParsedContact = Partial<
-  Record<(typeof PARSE_KEYS)[number], string | null>
->;
-
-type LinkedInProfileResponse = {
-  profileText?: string;
-  photoUrl?: string | null;
-  error?: string;
-};
-
 export function ContactForm({
   contact,
   onDone,
@@ -146,13 +101,7 @@ export function ContactForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Public page metadata first, then exact-URL AI web research as a fallback.
-  const [parsePending, startParse] = useTransition();
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [parseSetup, setParseSetup] = useState<string | null>(null);
-  const [parseDone, setParseDone] = useState(false);
-
-  const [form, setForm] = useState<FormState>(() => ({
+  const initialForm: FormState = {
     name: contact?.name ?? "",
     company: contact?.company ?? "",
     position: contact?.position ?? "",
@@ -172,92 +121,20 @@ export function ContactForm({
     last_contacted: (contact?.last_contacted ?? "").slice(0, 10),
     followup_interval_days: String(contact?.followup_interval_days ?? 21),
     status: contact?.status ?? "active",
-  }));
+  };
 
-  const set =
-    (key: keyof FormState) =>
-    (
-      e: React.ChangeEvent<
-        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-      >
-    ) =>
-      setForm((f) => ({ ...f, [key]: e.target.value }));
-
-  /** Pull the public profile from the URL, then merge every field it exposes. */
-  function runParse() {
-    const linkedinUrl = form.linkedin_url.trim();
-    if (!linkedinUrl) return;
-    setParseError(null);
-    setParseSetup(null);
-    setParseDone(false);
-    startParse(async () => {
-      let pulled: LinkedInProfileResponse = {};
-      let pullWarning: string | null = null;
-      try {
-        const response = await fetch(
-          `/dashboard/contacts/linkedin?url=${encodeURIComponent(linkedinUrl)}`
-        );
-        pulled = (await response.json()) as LinkedInProfileResponse;
-        if (!response.ok) {
-          pullWarning = pulled.error ?? "LinkedIn blocked the direct profile page.";
-          pulled = {};
-        }
-      } catch {
-        pullWarning = "LinkedIn blocked the direct profile page.";
-      }
-
-      if (pulled.photoUrl?.trim()) {
-        setForm((current) => ({
-          ...current,
-          photo_url: pulled.photoUrl!.trim(),
-        }));
-      }
-
-      const res = await callAI<ParsedContact>("parse_contact", {
-        url: linkedinUrl,
-        text: pulled.profileText ?? "",
-      });
-      if (res.setup) {
-        setParseSetup(res.setup);
-        return;
-      }
-      if (res.error || res.upgrade) {
-        setParseError(
-          res.error ?? pullWarning ?? "That didn't go through — try again."
-        );
-        return;
-      }
-      const data = res.data;
-      const hasUsableData =
-        !!data &&
-        PARSE_KEYS.some((key) =>
-          typeof data[key] === "string" ? !!data[key]?.trim() : false
-        );
-      if (!data || !hasUsableData) {
-        setParseError(
-          pullWarning ??
-            "No verifiable public details came back. Check that the URL is the right public profile."
-        );
-        return;
-      }
-      setForm((f) => {
-        const next = { ...f };
-        for (const k of PARSE_KEYS) {
-          const raw = data[k];
-          const v = typeof raw === "string" ? raw.trim() : "";
-          if (!v) continue;
-          // Only accept industries from our fixed vocabulary.
-          if (k === "industry" && !INDUSTRIES.some((i) => i.value === v)) {
-            continue;
-          }
-          if (!next[k].trim()) next[k] = v;
-        }
-        if (pulled.photoUrl?.trim()) next.photo_url = pulled.photoUrl.trim();
-        return next;
-      });
-      setParseDone(true);
-    });
-  }
+  const {
+    cancelImport,
+    form,
+    handleFieldChange,
+    importedPhotoFailed,
+    parseDone,
+    parseError,
+    parseNotice,
+    parsePending,
+    parseSetup,
+    runParse,
+  } = useLinkedInImport(initialForm);
 
   function goNext() {
     const name = form.name.trim();
@@ -275,6 +152,7 @@ export function ContactForm({
 
   // Runs on form submit (including Enter). On step 1, Enter means "Next".
   function submit() {
+    if (parsePending) return;
     if (step === 1) {
       goNext();
       return;
@@ -295,7 +173,7 @@ export function ContactForm({
     <Field label="Name *">
       <Input
         value={form.name}
-        onChange={set("name")}
+        onChange={(e) => handleFieldChange("name", e.target.value)}
         placeholder="Jordan Lee"
         autoFocus={isEdit || mode === "scratch"}
       />
@@ -319,14 +197,20 @@ export function ContactForm({
             <div className="flex gap-2">
               <StartOption
                 active={mode === "linkedin"}
-                onClick={() => setMode("linkedin")}
+                onClick={() => {
+                  if (mode !== "linkedin") cancelImport();
+                  setMode("linkedin");
+                }}
                 icon={<LinkedInIcon className="h-4 w-4" />}
                 title="Start with LinkedIn"
                 sub="Paste their profile link"
               />
               <StartOption
                 active={mode === "scratch"}
-                onClick={() => setMode("scratch")}
+                onClick={() => {
+                  cancelImport();
+                  setMode("scratch");
+                }}
                 icon={<PenLine className="h-4 w-4" />}
                 title="Start from scratch"
                 sub="Just type what you know"
@@ -340,7 +224,9 @@ export function ContactForm({
                 <div className="flex items-center gap-2">
                   <Input
                     value={form.linkedin_url}
-                    onChange={set("linkedin_url")}
+                    onChange={(e) =>
+                      handleFieldChange("linkedin_url", e.target.value)
+                    }
                     placeholder="https://linkedin.com/in/..."
                     autoFocus={!isEdit}
                   />
@@ -379,10 +265,17 @@ export function ContactForm({
                         src={form.photo_url}
                         alt="Pulled LinkedIn profile"
                         className="h-8 w-8 rounded-lg object-cover"
+                        referrerPolicy="no-referrer"
+                        onError={() => importedPhotoFailed(form.photo_url)}
                       />
                     )}
-                    Filled what LinkedIn exposed — give it a once-over.
+                    Public-profile check finished — give the details a once-over.
                   </div>
+                )}
+                {parseNotice && !parsePending && (
+                  <p className="text-xs leading-relaxed text-amber-700">
+                    {parseNotice}
+                  </p>
                 )}
                 {parseSetup && (
                   <div className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-xs leading-relaxed text-brand-700">
@@ -399,23 +292,37 @@ export function ContactForm({
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">{nameField}</div>
                 <Field label="Company">
-                  <Input value={form.company} onChange={set("company")} />
+                  <Input
+                    value={form.company}
+                    onChange={(e) =>
+                      handleFieldChange("company", e.target.value)
+                    }
+                  />
                 </Field>
                 <Field label="Position">
-                  <Input value={form.position} onChange={set("position")} />
+                  <Input
+                    value={form.position}
+                    onChange={(e) =>
+                      handleFieldChange("position", e.target.value)
+                    }
+                  />
                 </Field>
                 <Field label="Email">
                   <Input
                     type="email"
                     value={form.email}
-                    onChange={set("email")}
+                    onChange={(e) =>
+                      handleFieldChange("email", e.target.value)
+                    }
                   />
                 </Field>
                 <Field label="Phone">
                   <Input
                     type="tel"
                     value={form.phone}
-                    onChange={set("phone")}
+                    onChange={(e) =>
+                      handleFieldChange("phone", e.target.value)
+                    }
                     placeholder="(555) 123-4567"
                   />
                 </Field>
@@ -425,30 +332,46 @@ export function ContactForm({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">{nameField}</div>
               <Field label="Company">
-                <Input value={form.company} onChange={set("company")} />
+                <Input
+                  value={form.company}
+                  onChange={(e) =>
+                    handleFieldChange("company", e.target.value)
+                  }
+                />
               </Field>
               <Field label="Position">
-                <Input value={form.position} onChange={set("position")} />
+                <Input
+                  value={form.position}
+                  onChange={(e) =>
+                    handleFieldChange("position", e.target.value)
+                  }
+                />
               </Field>
               <Field label="Email">
                 <Input
                   type="email"
                   value={form.email}
-                  onChange={set("email")}
+                  onChange={(e) =>
+                    handleFieldChange("email", e.target.value)
+                  }
                 />
               </Field>
               <Field label="Phone">
                 <Input
                   type="tel"
                   value={form.phone}
-                  onChange={set("phone")}
+                  onChange={(e) =>
+                    handleFieldChange("phone", e.target.value)
+                  }
                   placeholder="(555) 123-4567"
                 />
               </Field>
               <Field label="LinkedIn URL">
                 <Input
                   value={form.linkedin_url}
-                  onChange={set("linkedin_url")}
+                  onChange={(e) =>
+                    handleFieldChange("linkedin_url", e.target.value)
+                  }
                   placeholder="https://linkedin.com/in/..."
                 />
               </Field>
@@ -468,7 +391,9 @@ export function ContactForm({
               <Field label="How you met / know them">
                 <Input
                   value={form.how_met}
-                  onChange={set("how_met")}
+                  onChange={(e) =>
+                    handleFieldChange("how_met", e.target.value)
+                  }
                   placeholder="Coffee chat via alumni database..."
                 />
               </Field>
@@ -480,7 +405,9 @@ export function ContactForm({
               >
                 <Input
                   value={form.relationship}
-                  onChange={set("relationship")}
+                  onChange={(e) =>
+                    handleFieldChange("relationship", e.target.value)
+                  }
                   placeholder="Second-year IB analyst, my club's alum mentor..."
                 />
               </Field>
@@ -488,7 +415,9 @@ export function ContactForm({
             <Field label="Connection strength">
               <Select
                 value={form.connection_strength}
-                onChange={set("connection_strength")}
+                onChange={(e) =>
+                  handleFieldChange("connection_strength", e.target.value)
+                }
               >
                 {CONNECTION_STRENGTHS.map((s) => (
                   <option key={s.value} value={s.value}>
@@ -498,7 +427,12 @@ export function ContactForm({
               </Select>
             </Field>
             <Field label="Industry">
-              <Select value={form.industry} onChange={set("industry")}>
+              <Select
+                value={form.industry}
+                onChange={(e) =>
+                  handleFieldChange("industry", e.target.value)
+                }
+              >
                 <option value="">—</option>
                 {INDUSTRIES.map((i) => (
                   <option key={i.value} value={i.value}>
@@ -508,16 +442,28 @@ export function ContactForm({
               </Select>
             </Field>
             <Field label="Location">
-              <Input value={form.location} onChange={set("location")} />
+              <Input
+                value={form.location}
+                onChange={(e) =>
+                  handleFieldChange("location", e.target.value)
+                }
+              />
             </Field>
             <Field label="School / alma mater">
-              <Input value={form.alma_mater} onChange={set("alma_mater")} />
+              <Input
+                value={form.alma_mater}
+                onChange={(e) =>
+                  handleFieldChange("alma_mater", e.target.value)
+                }
+              />
             </Field>
             <Field label="Last contacted">
               <Input
                 type="date"
                 value={form.last_contacted}
-                onChange={set("last_contacted")}
+                onChange={(e) =>
+                  handleFieldChange("last_contacted", e.target.value)
+                }
               />
             </Field>
             <Field
@@ -528,11 +474,16 @@ export function ContactForm({
                 type="number"
                 min={1}
                 value={form.followup_interval_days}
-                onChange={set("followup_interval_days")}
+                onChange={(e) =>
+                  handleFieldChange("followup_interval_days", e.target.value)
+                }
               />
             </Field>
             <Field label="Status">
-              <Select value={form.status} onChange={set("status")}>
+              <Select
+                value={form.status}
+                onChange={(e) => handleFieldChange("status", e.target.value)}
+              >
                 <option value="active">Active — keep warm</option>
                 <option value="warm">Warm — occasional touch</option>
                 <option value="dormant">Dormant</option>
@@ -540,7 +491,10 @@ export function ContactForm({
               </Select>
             </Field>
             <Field label="Tags" hint="Comma-separated, e.g. alumni, IB, mentor">
-              <Input value={form.tags} onChange={set("tags")} />
+              <Input
+                value={form.tags}
+                onChange={(e) => handleFieldChange("tags", e.target.value)}
+              />
             </Field>
           </div>
           <Field
@@ -549,12 +503,17 @@ export function ContactForm({
           >
             <Textarea
               value={form.shared_interests}
-              onChange={set("shared_interests")}
+              onChange={(e) =>
+                handleFieldChange("shared_interests", e.target.value)
+              }
               placeholder="Both play tennis, both from Chicago, same fraternity..."
             />
           </Field>
           <Field label="Notes">
-            <Textarea value={form.notes} onChange={set("notes")} />
+            <Textarea
+              value={form.notes}
+              onChange={(e) => handleFieldChange("notes", e.target.value)}
+            />
           </Field>
           {form.photo_url && (
             <div className="flex items-center gap-3 rounded-xl bg-brand-50 p-3">
@@ -563,6 +522,8 @@ export function ContactForm({
                 src={form.photo_url}
                 alt="LinkedIn profile"
                 className="h-10 w-10 rounded-xl object-cover"
+                referrerPolicy="no-referrer"
+                onError={() => importedPhotoFailed(form.photo_url)}
               />
               <div>
                 <p className="text-xs font-medium text-brand-900">Profile photo</p>
@@ -595,7 +556,14 @@ export function ContactForm({
           )}
         </div>
         <div className="flex gap-2">
-          <Button type="button" variant="secondary" onClick={onDone}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              cancelImport();
+              onDone();
+            }}
+          >
             Cancel
           </Button>
           {/* Both footer buttons submit; the form action routes step 1 to
@@ -604,11 +572,11 @@ export function ContactForm({
               mid-click, which used to fire a phantom submit that saved a
               half-filled contact. */}
           {step === 1 ? (
-            <Button key="next" type="submit">
+            <Button key="next" type="submit" disabled={parsePending}>
               Next <ArrowRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button key="save" type="submit" disabled={pending}>
+            <Button key="save" type="submit" disabled={pending || parsePending}>
               {pending ? <Spinner /> : isEdit ? "Save changes" : "Add contact"}
             </Button>
           )}
