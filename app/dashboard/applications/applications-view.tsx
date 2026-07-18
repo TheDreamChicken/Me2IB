@@ -422,36 +422,30 @@ export function ApplicationsView({
         />
       </Modal>
 
-      {/* Edit */}
+      {/* Persistent detail/edit shell: switching modes must never remount the overlay. */}
       <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title="Edit application"
+        open={!!selected}
+        onClose={() => {
+          if (editing) setEditing(null);
+          else setSelectedId(null);
+        }}
+        title={editing ? "Edit application" : ""}
+        wide={!editing}
       >
-        {editing && (
+        {editing ? (
           <ApplicationForm
             application={editing}
             contacts={contacts}
             onDone={() => setEditing(null)}
           />
-        )}
-      </Modal>
-
-      {/* Detail */}
-      <Modal
-        open={!!selected && !editing}
-        onClose={() => setSelectedId(null)}
-        title=""
-        wide
-      >
-        {selected && (
+        ) : selected ? (
           <ApplicationDetail
             app={selected}
             contacts={contacts}
             onClose={() => setSelectedId(null)}
             onEdit={() => setEditing(selected)}
           />
-        )}
+        ) : null}
       </Modal>
     </div>
   );

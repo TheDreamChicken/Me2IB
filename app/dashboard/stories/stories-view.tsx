@@ -1,19 +1,24 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { BookOpen, ListPlus, Plus } from "lucide-react";
+import { BookOpen, Check, ListPlus, Plus, Star } from "lucide-react";
 import type { Story } from "@/lib/types";
 import { STORY_CATEGORIES, labelFor } from "@/lib/constants";
 import {
+  CLASSIC_QUESTIONS,
+  STARRED_CLASSICS,
+  type ClassicQuestion,
+} from "@/lib/classic-questions";
+import {
+  addClassicQuestions,
   deleteStory,
-  seedStarterQuestions,
   upsertStory,
 } from "@/lib/actions/stories";
+import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
 import {
   Badge,
   Button,
   Card,
-  DeleteButton,
   EmptyState,
   Field,
   Input,
@@ -55,34 +60,211 @@ function strengthLabel(value: string): string {
 /* Small pieces                                                        */
 /* ------------------------------------------------------------------ */
 
-function SeedClassicsButton({
+function BrowseClassicsButton({
+  onClick,
   variant = "secondary",
   size = "md",
 }: {
+  onClick: () => void;
   variant?: "secondary" | "ghost";
   size?: "sm" | "md";
 }) {
-  const [pending, startTransition] = useTransition();
   return (
-    <Button
-      variant={variant}
-      size={size}
-      disabled={pending}
-      onClick={() =>
-        startTransition(async () => {
-          await seedStarterQuestions();
-        })
-      }
-    >
-      {pending ? (
-        <Spinner />
-      ) : (
-        <>
-          <ListPlus className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
-          Add the classics
-        </>
-      )}
+    <Button variant={variant} size={size} onClick={onClick}>
+      <ListPlus className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
+      Browse the classics
     </Button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Classics library (modal body)                                       */
+/* ------------------------------------------------------------------ */
+
+function ClassicsLibrary({ stories }: { stories: Story[] }) {
+  const [error, setError] = useState<string | null>(null);
+  const [addedCount, setAddedCount] = useState<number | null>(null);
+  // Per-question in-flight set so adding one row never locks the others.
+  const [inFlight, setInFlight] = useState<Set<string>>(new Set());
+  const [, startRowTransition] = useTransition();
+  const [bulkPending, startBulkTransition] = useTransition();
+
+  const inBank = useMemo(
+    () => new Set(stories.map((s) => s.question)),
+    [stories]
+  );
+
+  const groups = useMemo(
+    () =>
+      STORY_CATEGORIES.map((c) => {
+        const questions = CLASSIC_QUESTIONS.filter(
+          (q) => q.category === c.value
+        );
+        return {
+          value: c.value as string,
+          label: c.label as string,
+          questions: [
+            ...questions.filter((q) => q.starred),
+            ...questions.filter((q) => !q.starred),
+          ],
+        };
+      }).filter((g) => g.questions.length > 0),
+    []
+  );
+
+  const missingStarred = STARRED_CLASSICS.filter(
+    (q) => !inBank.has(q.question)
+  );
+
+  function addOne(q: ClassicQuestion) {
+    setError(null);
+    setAddedCount(null);
+    setInFlight((prev) => new Set(prev).add(q.question));
+    startRowTransition(async () => {
+      const fd = new FormData();
+      fd.set("question", q.question);
+      fd.set("category", q.category);
+      const res = await upsertStory(fd);
+      if (res.error) setError(res.error);
+      setInFlight((prev) => {
+        const next = new Set(prev);
+        next.delete(q.question);
+        return next;
+      });
+    });
+  }
+
+  function addAllStarred() {
+    setError(null);
+    setAddedCount(null);
+    startBulkTransition(async () => {
+      const res = await addClassicQuestions(
+        missingStarred.map((q) => ({
+          question: q.question,
+          category: q.category,
+        }))
+      );
+      if (res.error) setError(res.error);
+      else setAddedCount(res.added ?? 0);
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="flex items-center gap-1.5 text-xs text-zinc-500">
+          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+          = asked in almost every interview
+        </p>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={bulkPending || missingStarred.length === 0}
+          onClick={addAllStarred}
+        >
+          {bulkPending ? (
+            <Spinner />
+          ) : missingStarred.length === 0 ? (
+            <>
+              <Check className="h-3.5 w-3.5" /> All starred added
+            </>
+          ) : (
+            <>
+              <ListPlus className="h-3.5 w-3.5" />
+              {missingStarred.length === STARRED_CLASSICS.length
+                ? `Add all ${missingStarred.length} starred`
+                : `Add ${missingStarred.length} missing starred`}
+            </>
+          )}
+        </Button>
+      </div>
+
+      {addedCount !== null && (
+        <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {addedCount === 0
+            ? "Nothing to add — those are already in your bank."
+            : `Added ${addedCount} question${addedCount === 1 ? "" : "s"} to your bank.`}
+        </p>
+      )}
+
+      {error && (
+        <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
+
+      {groups.map((group) => {
+        const addedInGroup = group.questions.filter((q) =>
+          inBank.has(q.question)
+        ).length;
+        return (
+          <section key={group.value}>
+            <div className="mb-2 flex items-baseline gap-2">
+              <h3 className="text-sm font-semibold text-brand-900">
+                {group.label}
+              </h3>
+              <span className="text-xs text-zinc-400">
+                {addedInGroup} of {group.questions.length} in your bank
+              </span>
+            </div>
+            <ul className="space-y-1">
+              {group.questions.map((q) => {
+                const added = inBank.has(q.question);
+                const pending = inFlight.has(q.question);
+                return (
+                  <li
+                    key={q.question}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-xl px-3 py-1.5",
+                      added ? "bg-brand-50/60" : "hover:bg-brand-50"
+                    )}
+                  >
+                    <Star
+                      aria-hidden
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0",
+                        q.starred
+                          ? "fill-amber-400 text-amber-400"
+                          : "text-transparent"
+                      )}
+                    />
+                    <p
+                      className={cn(
+                        "flex-1 text-sm leading-snug",
+                        added ? "text-zinc-400" : "text-brand-900"
+                      )}
+                    >
+                      {q.question}
+                    </p>
+                    {added ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-600">
+                        <Check className="h-3.5 w-3.5" /> In your bank
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0"
+                        disabled={pending}
+                        onClick={() => addOne(q)}
+                      >
+                        {pending ? (
+                          <Spinner className="h-3.5 w-3.5" />
+                        ) : (
+                          <>
+                            <Plus className="h-3.5 w-3.5" /> Add
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
@@ -146,7 +328,13 @@ function StoryForm({
   }
 
   return (
-    <form action={submit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(new FormData(e.currentTarget));
+      }}
+      className="space-y-4"
+    >
       {story && <input type="hidden" name="id" value={story.id} />}
 
       <Field label="Question *">
@@ -333,6 +521,7 @@ export function StoriesView({ stories }: { stories: Story[] }) {
   const [tab, setTab] = useState<"general" | "by_firm">("general");
   const [firmFilter, setFirmFilter] = useState("");
   const [adding, setAdding] = useState(false);
+  const [browsingClassics, setBrowsingClassics] = useState(false);
   const [editing, setEditing] = useState<Story | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -351,12 +540,17 @@ export function StoriesView({ stories }: { stories: Story[] }) {
     [stories]
   );
 
+  // If the selected firm's last story was deleted or re-tagged, the filter
+  // would silently exclude everything — treat a stale selection as "All firms".
+  const effectiveFirmFilter = firms.includes(firmFilter) ? firmFilter : "";
+
   const filtered = useMemo(() => {
     let list =
       tab === "general"
         ? stories.filter((s) => !s.firm)
         : stories.filter(
-            (s) => s.firm && (!firmFilter || s.firm === firmFilter)
+            (s) =>
+              s.firm && (!effectiveFirmFilter || s.firm === effectiveFirmFilter)
           );
     if (strengthFilter) list = list.filter((s) => s.strength === strengthFilter);
     if (query.trim()) {
@@ -368,7 +562,7 @@ export function StoriesView({ stories }: { stories: Story[] }) {
       );
     }
     return list;
-  }, [stories, tab, firmFilter, query, strengthFilter]);
+  }, [stories, tab, effectiveFirmFilter, query, strengthFilter]);
 
   const groups = useMemo(() => {
     const known = new Set<string>(STORY_CATEGORIES.map((c) => c.value));
@@ -397,7 +591,9 @@ export function StoriesView({ stories }: { stories: Story[] }) {
         description="Answer the classics once, keep them polished, and never get caught off guard by 'tell me about a time...' again."
         action={
           <>
-            {bankIsSmall && <SeedClassicsButton />}
+            {bankIsSmall && (
+              <BrowseClassicsButton onClick={() => setBrowsingClassics(true)} />
+            )}
             <Button onClick={() => setAdding(true)}>
               <Plus className="h-4 w-4" /> Add story
             </Button>
@@ -431,7 +627,7 @@ export function StoriesView({ stories }: { stories: Story[] }) {
         </div>
         {tab === "by_firm" && firms.length > 0 && (
           <Select
-            value={firmFilter}
+            value={effectiveFirmFilter}
             onChange={(e) => setFirmFilter(e.target.value)}
             className="w-auto"
           >
@@ -466,7 +662,11 @@ export function StoriesView({ stories }: { stories: Story[] }) {
         </Select>
         {!bankIsSmall && (
           <div className="ml-auto">
-            <SeedClassicsButton variant="ghost" size="sm" />
+            <BrowseClassicsButton
+              variant="ghost"
+              size="sm"
+              onClick={() => setBrowsingClassics(true)}
+            />
           </div>
         )}
       </div>
@@ -491,7 +691,9 @@ export function StoriesView({ stories }: { stories: Story[] }) {
           action={
             stories.length === 0 ? (
               <div className="flex flex-wrap justify-center gap-2">
-                <SeedClassicsButton />
+                <BrowseClassicsButton
+                  onClick={() => setBrowsingClassics(true)}
+                />
                 <Button onClick={() => setAdding(true)}>
                   <Plus className="h-4 w-4" /> Add your first story
                 </Button>
@@ -542,30 +744,35 @@ export function StoriesView({ stories }: { stories: Story[] }) {
         <StoryForm story={null} onDone={() => setAdding(false)} />
       </Modal>
 
-      {/* Edit */}
+      {/* Classics library */}
       <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title="Edit story"
+        open={browsingClassics}
+        onClose={() => setBrowsingClassics(false)}
+        title="The classics"
         wide
       >
-        {editing && <StoryForm story={editing} onDone={() => setEditing(null)} />}
+        <ClassicsLibrary stories={stories} />
       </Modal>
 
-      {/* Detail */}
+      {/* Persistent detail/edit shell avoids replaying the modal entrance. */}
       <Modal
-        open={!!selected && !editing}
-        onClose={() => setSelectedId(null)}
-        title=""
+        open={!!selected}
+        onClose={() => {
+          if (editing) setEditing(null);
+          else setSelectedId(null);
+        }}
+        title={editing ? "Edit story" : ""}
         wide
       >
-        {selected && (
+        {editing ? (
+          <StoryForm story={editing} onDone={() => setEditing(null)} />
+        ) : selected ? (
           <StoryDetail
             story={selected}
             onClose={() => setSelectedId(null)}
             onEdit={() => setEditing(selected)}
           />
-        )}
+        ) : null}
       </Modal>
     </div>
   );

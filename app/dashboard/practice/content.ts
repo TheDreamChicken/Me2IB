@@ -548,7 +548,7 @@ export const PRACTICE_TABS: PracticeTabMeta[] = [
     value: "terms",
     label: "Key Terms",
     intro:
-      "The vocab everyone around you pretends they already know. Tap a term for the plain-English version; go deeper only when you actually care.",
+      "The vocab everyone around you pretends they already know. Tap a term for the plain-English version; expand only when you actually care.",
   },
   {
     value: "mathgym",

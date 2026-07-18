@@ -24,7 +24,6 @@ export async function saveDocument(formData: FormData): Promise<ActionResult> {
     name,
     doc_type: str(formData, "doc_type") ?? "resume",
     industry_target: str(formData, "industry_target"),
-    content_text: str(formData, "content_text"),
     notes: str(formData, "notes"),
   };
 
@@ -41,6 +40,50 @@ export async function saveDocument(formData: FormData): Promise<ActionResult> {
         .eq("id", id)
         .eq("user_id", user.id)
     : await supabase.from("documents").insert({ ...payload, user_id: user.id });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/documents");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export type DocumentAiFeedback = {
+  overview?: string;
+  strengths?: string[];
+  improvements?: string[];
+  verdict?: string;
+};
+
+export async function saveDocumentAiFeedback(
+  id: string,
+  feedback: DocumentAiFeedback
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  // The feedback arrives from the client (which got it from the AI route),
+  // so whitelist the shape instead of storing it blindly.
+  const strings = (v: unknown): string[] | undefined =>
+    Array.isArray(v)
+      ? v.filter((s): s is string => typeof s === "string")
+      : undefined;
+  const clean: DocumentAiFeedback = {};
+  if (typeof feedback?.overview === "string") clean.overview = feedback.overview;
+  const strengths = strings(feedback?.strengths);
+  if (strengths) clean.strengths = strengths;
+  const improvements = strings(feedback?.improvements);
+  if (improvements) clean.improvements = improvements;
+  if (typeof feedback?.verdict === "string") clean.verdict = feedback.verdict;
+
+  const { error } = await supabase
+    .from("documents")
+    .update({ ai_feedback: clean, ai_feedback_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) return { error: error.message };
 

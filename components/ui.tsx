@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Search, X } from "lucide-react";
+import { ChevronDown, Loader2, Search, X } from "lucide-react";
 
 export function cn(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
@@ -104,10 +104,18 @@ export function Select({
   children,
   ...props
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  // Custom chevron with breathing room from the edge (the native arrow hugs
+  // the rounded corner). Width/margin classes land on the wrapper.
   return (
-    <select className={cn(fieldClasses, "cursor-pointer", className)} {...props}>
-      {children}
-    </select>
+    <div className={cn("relative", className)}>
+      <select
+        className={cn(fieldClasses, "cursor-pointer appearance-none pr-9")}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-400" />
+    </div>
   );
 }
 
@@ -290,6 +298,14 @@ export function Modal({
   wide?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const openedAtRef = useRef(0);
+
+  // Stamped only on the open transition — the other effect re-runs whenever
+  // the parent re-renders (inline onClose identity), which must not re-arm
+  // the outside-click grace window.
+  useEffect(() => {
+    if (open) openedAtRef.current = Date.now();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -308,8 +324,11 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-brand-900/25 p-4 backdrop-blur-sm sm:items-center"
+      className="animate-overlay-in fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-brand-900/30 p-4 sm:items-center"
       onMouseDown={(e) => {
+        // Grace period: the tail of a fast double-click on whatever opened
+        // this modal must not count as an outside click and instantly close it.
+        if (Date.now() - openedAtRef.current < 250) return;
         if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
           onClose();
         }

@@ -17,11 +17,11 @@ import {
 import type { Experience } from "@/lib/types";
 import { ROLE_TYPES, labelFor } from "@/lib/constants";
 import { deleteExperience, upsertExperience } from "@/lib/actions/experiences";
+import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
 import {
   Badge,
   Button,
   Card,
-  DeleteButton,
   EmptyState,
   Field,
   Input,
@@ -122,7 +122,13 @@ function ExperienceForm({
   }
 
   return (
-    <form action={submit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(new FormData(e.currentTarget));
+      }}
+      className="space-y-4"
+    >
       {experience && <input type="hidden" name="id" value={experience.id} />}
 
       <div className="grid gap-4 sm:grid-cols-2">

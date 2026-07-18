@@ -1,7 +1,7 @@
 "use client";
 
 // Key Terms tab: selectable term chips + an expanding detail panel with a
-// one-line definition and a "Go deeper" expandable.
+// one-line definition and an optional longer explanation.
 
 import { useState } from "react";
 import { ChevronDown, KeyRound } from "lucide-react";
@@ -38,7 +38,7 @@ export function KeyTermsTab() {
       </div>
 
       {active ? (
-        // key resets the "Go deeper" state when switching terms
+        // key resets the expanded state when switching terms
         <TermPanel key={active.term} term={active} />
       ) : (
         <p className="flex items-center gap-1.5 px-1 text-sm text-zinc-400">
@@ -70,7 +70,7 @@ function TermPanel({ term }: { term: KeyTerm }) {
             deep && "rotate-180"
           )}
         />
-        {deep ? "Enough depth, thanks" : "Go deeper"}
+        {deep ? "alr enough yap" : "more explanation"}
       </button>
       {deep && (
         <div className="mt-3 animate-fade-up space-y-3 rounded-xl bg-brand-50/70 p-4">

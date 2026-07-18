@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Markdown from "react-markdown";
 import {
   AlarmClock,
   Building2,
@@ -11,10 +12,12 @@ import {
   MapPin,
   Phone,
   Plus,
+  RefreshCw,
+  Sparkles,
   Users,
 } from "lucide-react";
 import { LinkedInIcon } from "@/components/icons";
-import type { Contact } from "@/lib/types";
+import type { Contact, Profile } from "@/lib/types";
 import {
   CONNECTION_STRENGTHS,
   INDUSTRIES,
@@ -24,12 +27,14 @@ import {
 import { daysSinceTouch, followupDelta, isOverdue } from "@/lib/contact-utils";
 import { localDateKey, useNow } from "@/components/use-today";
 import { deleteContact, markContacted } from "@/lib/actions/contacts";
+import { callAI } from "@/lib/ai-client";
+import { TierGate } from "@/components/tier-gate";
+import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
 import { ContactForm } from "./contact-form";
 import {
   Badge,
   Button,
   Card,
-  DeleteButton,
   EmptyState,
   Modal,
   PageHeader,
@@ -136,16 +141,115 @@ function TouchBadge({ contact, now }: { contact: Contact; now: Date | null }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* AI outreach drafts                                                  */
+/* ------------------------------------------------------------------ */
+
+function OutreachSection({
+  contact,
+  profile,
+}: {
+  contact: Contact;
+  profile: Profile | null;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [setup, setSetup] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function generate() {
+    setError(null);
+    setSetup(null);
+    startTransition(async () => {
+      const res = await callAI("outreach", { contact, profile });
+      if (res.setup) {
+        setSetup(res.setup);
+        return;
+      }
+      if (res.upgrade) {
+        // The TierGate should catch this first — belt and suspenders.
+        setError(
+          res.error ??
+            `This needs the ${res.upgrade.neededLabel} plan — upgrade in Account → Plan.`
+        );
+        return;
+      }
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      if (res.text) setDraft(res.text);
+      else setError("No draft came back — try again.");
+    });
+  }
+
+  const firstName = contact.name.split(/\s+/)[0];
+
+  return (
+    <div className="rounded-2xl border border-brand-100 bg-brand-50/40 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-medium text-brand-900">
+          <Sparkles className="h-4 w-4 text-brand-500" /> AI outreach drafts
+        </p>
+        <Button
+          size="sm"
+          variant={draft ? "secondary" : "primary"}
+          onClick={generate}
+          disabled={pending}
+        >
+          {pending ? (
+            <Spinner />
+          ) : draft ? (
+            <>
+              <RefreshCw className="h-3.5 w-3.5" /> Draft again
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-3.5 w-3.5" /> Draft outreach
+            </>
+          )}
+        </Button>
+      </div>
+      {!draft && !setup && (
+        <p className="mt-1 text-xs text-zinc-500">
+          Ready-to-send emails built from {firstName}&apos;s details and your
+          shared ground.
+        </p>
+      )}
+      {setup && (
+        <div className="mt-3 rounded-xl border border-brand-200 bg-white px-3 py-2 text-xs leading-relaxed text-brand-700">
+          <span className="font-medium">
+            AI isn&apos;t set up yet — one quick step:
+          </span>{" "}
+          {setup}
+        </div>
+      )}
+      {error && (
+        <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
+      {draft && (
+        <div className="prose-cozy mt-3 rounded-xl bg-white p-4 text-sm">
+          <Markdown>{draft}</Markdown>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Detail card popup                                                   */
 /* ------------------------------------------------------------------ */
 
 function ContactDetail({
   contact,
+  profile,
   now,
   onEdit,
   onClose,
 }: {
   contact: Contact;
+  profile: Profile | null;
   now: Date | null;
   onEdit: () => void;
   onClose: () => void;
@@ -248,6 +352,16 @@ function ContactDetail({
           ))}
       </div>
 
+      {/* AI outreach (heat tier) — drafts are ephemeral, not persisted. */}
+      <TierGate
+        feature="ai_outreach"
+        title="AI outreach drafts"
+        blurb="Ready-to-send emails tailored to this contact and your shared ground."
+        variant="card"
+      >
+        <OutreachSection contact={contact} profile={profile} />
+      </TierGate>
+
       {contact.relationship && (
         <div className="rounded-xl bg-brand-50 p-4 text-sm leading-relaxed text-brand-900">
           {contact.relationship}
@@ -291,7 +405,13 @@ function ContactDetail({
 /* Main view                                                           */
 /* ------------------------------------------------------------------ */
 
-export function ContactsView({ contacts }: { contacts: Contact[] }) {
+export function ContactsView({
+  contacts,
+  profile,
+}: {
+  contacts: Contact[];
+  profile: Profile | null;
+}) {
   const now = useNow();
   const [query, setQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
@@ -464,32 +584,32 @@ export function ContactsView({ contacts }: { contacts: Contact[] }) {
         {adding && <ContactForm contact={null} onDone={() => setAdding(false)} />}
       </Modal>
 
-      {/* Edit */}
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit contact">
-        {editing && (
+      {/* Detail + edit share one persistent overlay so switching views never
+          tears down the modal backdrop (which caused a white flash). */}
+      <Modal
+        open={!!selected}
+        onClose={() => {
+          if (editing) setEditing(null);
+          else setSelectedId(null);
+        }}
+        title={editing ? "Edit contact" : ""}
+        wide={!editing}
+      >
+        {editing ? (
           <ContactForm
             key={editing.id}
             contact={editing}
             onDone={() => setEditing(null)}
           />
-        )}
-      </Modal>
-
-      {/* Detail */}
-      <Modal
-        open={!!selected && !editing}
-        onClose={() => setSelectedId(null)}
-        title=""
-        wide
-      >
-        {selected && (
+        ) : selected ? (
           <ContactDetail
             contact={selected}
+            profile={profile}
             now={now}
             onClose={() => setSelectedId(null)}
             onEdit={() => setEditing(selected)}
           />
-        )}
+        ) : null}
       </Modal>
     </div>
   );

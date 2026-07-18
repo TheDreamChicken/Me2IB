@@ -94,7 +94,13 @@ export function EventForm({
   }
 
   return (
-    <form action={submit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(new FormData(e.currentTarget));
+      }}
+      className="space-y-4"
+    >
       {event && <input type="hidden" name="id" value={event.id} />}
       <input type="hidden" name="source" value={event?.source ?? "manual"} />
 

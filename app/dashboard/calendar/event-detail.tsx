@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { Briefcase, CheckCircle2, Clock, MapPin, Users, Video } from "lucide-react";
 import type { CalendarEvent } from "@/lib/types";
 import { deleteEvent, toggleEventComplete } from "@/lib/actions/events";
-import { Badge, Button, DeleteButton, Spinner, cn } from "@/components/ui";
+import { Badge, Button, Spinner, cn } from "@/components/ui";
+import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
 import {
   eventDayKey,
   formatDayKey,

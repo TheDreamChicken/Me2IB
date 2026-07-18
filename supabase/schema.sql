@@ -36,6 +36,7 @@ create table if not exists public.profiles (
   city text,
   phone text,
   linkedin_url text,
+  avatar_url text,
   target_industries text[] default '{}',
   clubs text,                 -- clubs & activities
   professional_summary text,  -- experience blurb
@@ -376,6 +377,36 @@ drop policy if exists "documents_bucket_delete_own" on storage.objects;
 create policy "documents_bucket_delete_own" on storage.objects for delete
   using (bucket_id = 'documents' and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- Public profile photos, with writes restricted to each user's own folder.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatars',
+  'avatars',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp']::text[]
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "avatars_bucket_select_own" on storage.objects;
+create policy "avatars_bucket_select_own" on storage.objects for select
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "avatars_bucket_insert_own" on storage.objects;
+create policy "avatars_bucket_insert_own" on storage.objects for insert
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "avatars_bucket_update_own" on storage.objects;
+create policy "avatars_bucket_update_own" on storage.objects for update
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "avatars_bucket_delete_own" on storage.objects;
+create policy "avatars_bucket_delete_own" on storage.objects for delete
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
 -- ============================================================
 -- Iteration 1 additions (idempotent — safe to re-run)
 -- ============================================================
@@ -385,6 +416,7 @@ alter table public.profiles add column if not exists tier text default 'free';
 alter table public.profiles add column if not exists majors text[] default '{}';
 alter table public.profiles add column if not exists minors text[] default '{}';
 alter table public.profiles add column if not exists certificates text[] default '{}';
+alter table public.profiles add column if not exists avatar_url text;
 
 -- Stories: optional firm tag for firm-specific answers
 alter table public.stories add column if not exists firm text;
@@ -395,3 +427,73 @@ alter table public.events add column if not exists meeting_link text;
 
 -- Experiences: optional external link (portfolio, doc, repo...)
 alter table public.experiences add column if not exists link text;
+
+-- ============================================================
+-- Iteration 2 additions (idempotent — safe to re-run)
+-- ============================================================
+
+-- Profiles.tier now holds: 'free' (Still Cold) | 'warming' (Warming Up) | 'heat' (In The Heat).
+-- Migrate legacy iteration-1 values.
+update public.profiles set tier = 'warming' where tier = 'plus';
+update public.profiles set tier = 'heat' where tier = 'pro';
+
+-- Plans: one AI-generated plan per user (enables upsert on user_id).
+-- Dedupe first (keep the newest row per user) so the index always creates,
+-- even if concurrent generations ever left duplicates behind.
+delete from public.plans p
+  using public.plans n
+  where n.user_id = p.user_id
+    and (n.created_at, n.id) > (p.created_at, p.id);
+create unique index if not exists plans_user_unique on public.plans (user_id);
+
+-- ------------------------------------------------------------
+-- Admin flag + app-wide settings (the AI model picker)
+-- ------------------------------------------------------------
+
+-- Owner/admin flag. A trigger blocks changing it through the app/API —
+-- it can ONLY be flipped here in the SQL editor (which runs as postgres),
+-- so no user can grant themselves admin.
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+
+create or replace function public.guard_is_admin()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.is_admin is distinct from old.is_admin
+     and current_user not in ('postgres', 'supabase_admin', 'service_role') then
+    raise exception 'is_admin can only be changed from the Supabase SQL editor';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_is_admin on public.profiles;
+create trigger profiles_guard_is_admin before update on public.profiles
+  for each row execute function public.guard_is_admin();
+
+-- App-wide settings. Currently one key: 'ai_model' (which model powers /api/ai).
+-- Everyone signed in may read (the value is not a secret); only admins may write.
+create table if not exists public.app_settings (
+  key text primary key,
+  value text,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.app_settings enable row level security;
+
+drop policy if exists "app_settings_select_authed" on public.app_settings;
+create policy "app_settings_select_authed" on public.app_settings for select
+  using (auth.uid() is not null);
+
+drop policy if exists "app_settings_write_admin" on public.app_settings;
+create policy "app_settings_write_admin" on public.app_settings for all
+  using (exists (select 1 from public.profiles p where p.user_id = auth.uid() and p.is_admin))
+  with check (exists (select 1 from public.profiles p where p.user_id = auth.uid() and p.is_admin));
+
+drop trigger if exists app_settings_updated_at on public.app_settings;
+create trigger app_settings_updated_at before update on public.app_settings
+  for each row execute function public.set_updated_at();
+
+-- >>> Grant the owner admin (idempotent — safe to re-run):
+update public.profiles set is_admin = true where email = 'reyandatta@u.northwestern.edu';

@@ -53,21 +53,25 @@ Prereqs: Node.js ≥ 20.9, a free [Supabase](https://supabase.com) project.
 
 ## Deploy publicly (recommended: Vercel)
 
-1. Push this repo to GitHub.
-2. Go to [vercel.com](https://vercel.com) → **Add New Project** → import the repo. Vercel auto-detects Next.js; no build settings needed.
-3. In the project's **Settings → Environment Variables**, add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same values as `.env.local`).
-4. Deploy. You'll get a `your-app.vercel.app` URL (add a custom domain later in Settings → Domains).
-5. Back in Supabase → **Authentication → URL Configuration**: set **Site URL** to your deployed URL and add `https://your-app.vercel.app/auth/callback` to **Redirect URLs** — this makes email-confirmation links land back on your site.
+1. Re-run the full [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL Editor. It is idempotent and applies any new tables, columns, policies, and storage buckets before the new UI goes live.
+2. Push this repo to GitHub.
+3. Go to [vercel.com](https://vercel.com) → **Add New Project** → import the repo. Vercel auto-detects Next.js; no custom build settings are needed.
+4. In the project's **Settings → Environment Variables**, add these for Production (and Preview if you use preview deployments):
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SITE_URL` — the canonical `https://your-app.vercel.app` or custom-domain URL
+   - `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` — server-side secrets; never prefix them with `NEXT_PUBLIC_`
+   - Optional: `AI_PROVIDER=openai` or `AI_PROVIDER=anthropic` when both provider keys are configured
+5. Deploy. You'll get a `your-app.vercel.app` URL (add a custom domain later in Settings → Domains, then update `NEXT_PUBLIC_SITE_URL`).
+6. In Supabase → **Authentication → URL Configuration**, set **Site URL** to the canonical production URL and add `https://your-app.vercel.app/auth/callback` to **Redirect URLs**. Keep `http://localhost:3000/**` for local development; add a carefully scoped Vercel preview wildcard only if you use preview authentication.
 
 That's it — Supabase hosts the database/auth/storage, Vercel hosts the app. Both have generous free tiers.
 
-## Enabling the AI features (later)
+## AI providers
 
-The AI endpoints are already scaffolded in [`app/api/ai/route.ts`](app/api/ai/route.ts) (document review, plan generation, outreach drafts, chat, opportunity scanning via web search). The UI currently shows "coming soon" placeholders. To activate them when ready:
+The live AI endpoints are implemented in [`app/api/ai/route.ts`](app/api/ai/route.ts). They cover document review, plan generation, outreach drafts, opportunity scanning, LinkedIn contact import, and job-posting autofill. AI Chat and Math Gym AI Practice intentionally remain locked previews.
 
-1. Get an API key at [platform.claude.com](https://platform.claude.com).
-2. Add `ANTHROPIC_API_KEY=sk-ant-...` to `.env.local` (and to Vercel env vars for production).
-3. Wire the placeholder UI to `callAI(...)` from [`lib/ai-client.ts`](lib/ai-client.ts) — each placeholder card marks where.
+Add `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` to `.env.local` locally and to Vercel's encrypted environment variables in production. Admins choose the site-wide model in **Account → AI engine**; the choice is stored in Supabase rather than an environment file.
 
 ## Project docs
 

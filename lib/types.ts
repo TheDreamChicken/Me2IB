@@ -14,12 +14,14 @@ export type Profile = {
   city: string | null;
   phone: string | null;
   linkedin_url: string | null;
+  avatar_url: string | null;
   target_industries: string[];
   clubs: string | null;
   professional_summary: string | null;
   personal_interests: string | null;
   fun_facts: string | null;
   tier: string | null;
+  is_admin: boolean;
   majors: string[];
   minors: string[];
   certificates: string[];

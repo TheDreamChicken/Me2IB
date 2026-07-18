@@ -19,11 +19,13 @@ import {
   MessageCircleQuestion,
   CircleUserRound,
   Settings,
+  ShieldCheck,
   LogOut,
   Menu,
   X,
 } from "lucide-react";
 import { cn } from "@/components/ui";
+import { normalizeTier, TIER_INFO } from "@/lib/tiers";
 import { signout } from "@/lib/actions/auth";
 
 const NAV_SECTIONS: {
@@ -114,21 +116,45 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 export function Sidebar({
   name,
   email,
+  avatarUrl,
+  tier,
+  isAdmin = false,
 }: {
   name: string | null;
   email: string | null;
+  avatarUrl: string | null;
+  tier: string | null;
+  isAdmin?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const tierLabel = TIER_INFO[normalizeTier(tier)].label;
 
   const userBlock = (
     <div className="border-t border-brand-100 p-3">
       <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-200 text-sm font-semibold text-brand-800">
-          {(name || email || "?").charAt(0).toUpperCase()}
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-200 text-sm font-semibold text-brand-800">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            (name || email || "?").charAt(0).toUpperCase()
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-brand-900">
             {name || "Your account"}
+          </p>
+          <p className="flex items-center gap-1 truncate text-[11px] text-brand-400/90">
+            {tierLabel}
+            {isAdmin && (
+              <span className="inline-flex items-center gap-0.5 font-medium text-amber-500">
+                · <ShieldCheck className="h-3 w-3" /> Admin
+              </span>
+            )}
           </p>
           <p className="truncate text-xs text-zinc-400">{email}</p>
         </div>

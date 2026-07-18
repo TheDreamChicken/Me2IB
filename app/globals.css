@@ -3,6 +3,13 @@
 :root {
   --background: #ffffff;
   --foreground: #2d2438;
+  /* Page-length background gradient (see the single body rule below).
+     Themes override ONLY these vars — never redeclare body's background,
+     or the shorthand resets attachment/repeat and the page "chops". */
+  --page-grad-top: #f6f1ff;
+  --page-grad-mid: #fbf9ff;
+  --glow-a: rgba(180, 150, 250, 0.18);
+  --glow-b: rgba(154, 113, 246, 0.12);
 }
 
 @theme {
@@ -26,12 +33,26 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* One continuous page-length gradient: tint at the very top, base color at
+   the very bottom, glows pinned to the top edge. Longhands (not the
+   `background` shorthand) so nothing can accidentally reset repeat/size. */
 body {
-  background:
-    radial-gradient(900px 400px at 85% -10%, rgba(180, 150, 250, 0.18), transparent 60%),
-    radial-gradient(700px 350px at 0% 0%, rgba(154, 113, 246, 0.12), transparent 55%),
-    linear-gradient(180deg, #f6f1ff 0%, #ffffff 340px);
-  background-attachment: fixed;
+  background-color: var(--background);
+  background-image:
+    radial-gradient(900px 400px at 85% -10%, var(--glow-a), transparent 60%),
+    radial-gradient(700px 350px at 0% 0%, var(--glow-b), transparent 55%),
+    linear-gradient(
+      180deg,
+      var(--page-grad-top) 0%,
+      var(--page-grad-mid) 45%,
+      var(--background) 100%
+    );
+  background-size:
+    100% 640px,
+    100% 640px,
+    100% 100%;
+  background-position: top, top, top;
+  background-repeat: no-repeat;
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
@@ -64,12 +85,10 @@ body {
   --chip: #2a2438;    /* zinc-100 */
   --placeholder: #6f6588;
   --prose-ink: #e6def7;
-}
-[data-theme="dark"] body {
-  background:
-    radial-gradient(900px 400px at 85% -10%, rgba(124, 92, 224, 0.14), transparent 60%),
-    radial-gradient(700px 350px at 0% 0%, rgba(90, 70, 160, 0.12), transparent 55%),
-    linear-gradient(180deg, #141020 0%, #0f0d14 340px);
+  --page-grad-top: #141020;
+  --page-grad-mid: #110e1a;
+  --glow-a: rgba(124, 92, 224, 0.14);
+  --glow-b: rgba(90, 70, 160, 0.12);
 }
 
 /* ---- Deep End: late-night navy, Ocean's darker sibling ---- */
@@ -93,12 +112,10 @@ body {
   --chip: #1e2940;
   --placeholder: #647492;
   --prose-ink: #dde8fa;
-}
-[data-theme="deep"] body {
-  background:
-    radial-gradient(900px 400px at 85% -10%, rgba(63, 110, 224, 0.16), transparent 60%),
-    radial-gradient(700px 350px at 0% 0%, rgba(45, 80, 170, 0.13), transparent 55%),
-    linear-gradient(180deg, #0e1526 0%, #0a0f1c 340px);
+  --page-grad-top: #0e1526;
+  --page-grad-mid: #0c1220;
+  --glow-a: rgba(63, 110, 224, 0.16);
+  --glow-b: rgba(45, 80, 170, 0.13);
 }
 
 /* ---- Forest: mossy green-charcoal, Sage's darker sibling ---- */
@@ -122,12 +139,10 @@ body {
   --chip: #232f25;
   --placeholder: #6d7d6f;
   --prose-ink: #ddeddc;
-}
-[data-theme="forest"] body {
-  background:
-    radial-gradient(900px 400px at 85% -10%, rgba(111, 170, 114, 0.13), transparent 60%),
-    radial-gradient(700px 350px at 0% 0%, rgba(60, 110, 70, 0.12), transparent 55%),
-    linear-gradient(180deg, #121a13 0%, #0e130f 340px);
+  --page-grad-top: #121a13;
+  --page-grad-mid: #101711;
+  --glow-a: rgba(111, 170, 114, 0.13);
+  --glow-b: rgba(60, 110, 70, 0.12);
 }
 
 /* ---- Shared dark-family surface & text remapping ---- */
@@ -143,6 +158,8 @@ body {
 :is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) .bg-amber-50 { background-color: #362a17; }
 :is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) .bg-emerald-50 { background-color: #16301f; }
 :is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) .bg-amber-100 { background-color: #3d301f; }
+:is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) .bg-sky-100 { background-color: #16283a; }
+:is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) .bg-rose-100 { background-color: #452532; }
 :is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) input::placeholder,
 :is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) textarea::placeholder { color: var(--placeholder); }
 :is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) .card-shadow {
@@ -152,6 +169,8 @@ body {
 }
 :is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) :is(.prose-cozy h1, .prose-cozy h2, .prose-cozy h3, .prose-cozy strong) { color: var(--prose-ink); }
 :is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) .prose-cozy code { background: var(--chip); }
+/* Accent-card gradients fade to the theme surface, not literal white */
+:is([data-theme="dark"], [data-theme="deep"], [data-theme="forest"]) .to-white { --tw-gradient-to: var(--surface); }
 
 /* ---- Ocean: blue with white faded gradient ---- */
 [data-theme="blue"] {
@@ -166,12 +185,10 @@ body {
   --color-brand-700: #2f56d4;
   --color-brand-800: #2a49b2;
   --color-brand-900: #233a90;
-}
-[data-theme="blue"] body {
-  background:
-    radial-gradient(900px 400px at 85% -10%, rgba(120, 165, 250, 0.2), transparent 60%),
-    radial-gradient(700px 350px at 0% 0%, rgba(95, 141, 246, 0.12), transparent 55%),
-    linear-gradient(180deg, #eff5ff 0%, #ffffff 340px);
+  --page-grad-top: #eff5ff;
+  --page-grad-mid: #f7faff;
+  --glow-a: rgba(120, 165, 250, 0.2);
+  --glow-b: rgba(95, 141, 246, 0.12);
 }
 
 /* ---- Sage: earthy greens, darker ink ---- */
@@ -187,12 +204,11 @@ body {
   --color-brand-700: #42683c;
   --color-brand-800: #365431;
   --color-brand-900: #2b4227;
-}
-[data-theme="sage"] body {
-  background:
-    radial-gradient(900px 400px at 85% -10%, rgba(139, 179, 126, 0.18), transparent 60%),
-    radial-gradient(700px 350px at 0% 0%, rgba(106, 154, 92, 0.1), transparent 55%),
-    linear-gradient(180deg, #f1f6ee 0%, #fdfffc 340px);
+  --background: #fdfffc;
+  --page-grad-top: #f1f6ee;
+  --page-grad-mid: #f8fbf6;
+  --glow-a: rgba(139, 179, 126, 0.18);
+  --glow-b: rgba(106, 154, 92, 0.1);
 }
 
 /* Cozy card shadow */
@@ -221,6 +237,23 @@ body {
 
 .animate-fade-up {
   animation: fade-up 160ms ease-out;
+}
+
+/* Modal overlay entrance — fade the dim in sync with the panel's fade-up.
+   Deliberately NO backdrop-filter on modal overlays: animating (or even
+   first-frame compositing) it re-rasterizes the viewport and can flash
+   bright white when a modal opens. */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-overlay-in {
+  animation: overlay-in 160ms ease-out;
 }
 
 /* Simple prose styling for AI/markdown output */

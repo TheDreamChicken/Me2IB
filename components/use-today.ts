@@ -10,7 +10,8 @@ import { useEffect, useState } from "react";
 export function useNow(): Date | null {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
-    setNow(new Date());
+    const id = setTimeout(() => setNow(new Date()), 0);
+    return () => clearTimeout(id);
   }, []);
   return now;
 }

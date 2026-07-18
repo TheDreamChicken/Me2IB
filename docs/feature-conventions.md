@@ -5,7 +5,7 @@ Read this fully, then read the reference implementation before writing code.
 ## Non-negotiables
 
 1. **Next.js 16.2.10 has breaking changes.** Read `docs/nextjs16-conventions.md` (in this repo) BEFORE writing code. Highlights: `params`/`searchParams` are Promises and must be awaited; `cookies()` is async; `proxy.ts` replaces middleware (already set up — don't touch); error boundaries receive `unstable_retry` not `reset`; Tailwind v4 (no tailwind.config).
-2. **Do NOT edit shared files**: `components/ui.tsx`, `components/icons.tsx`, `components/site-footer.tsx`, `components/dashboard/sidebar.tsx`, `app/layout.tsx`, `app/globals.css`, `app/dashboard/layout.tsx`, `lib/supabase/*`, `lib/types.ts`, `lib/constants.ts`, `proxy.ts`, `supabase/schema.sql`, `app/api/ai/route.ts`. If you need a change in one, say so in your final message instead of editing.
+2. **Do NOT edit shared files**: `components/ui.tsx`, `components/icons.tsx`, `components/site-footer.tsx`, `components/dashboard/sidebar.tsx`, `components/tier-context.tsx`, `components/tier-gate.tsx`, `app/layout.tsx`, `app/globals.css`, `app/dashboard/layout.tsx`, `lib/supabase/*`, `lib/types.ts`, `lib/constants.ts`, `lib/tiers.ts`, `proxy.ts`, `supabase/schema.sql`, `app/api/ai/route.ts`. If you need a change in one, say so in your final message instead of editing.
 3. **Do NOT run** `npm run dev`, `npm run build`, or install packages. `npx tsc --noEmit` is allowed and encouraged before finishing.
 4. Only create/edit files inside your assigned route directory and your assigned `lib/actions/<domain>.ts` file.
 
@@ -30,9 +30,19 @@ Forms: plain `<form action={submitFn}>` where `submitFn(formData)` wraps the ser
 
 Light purple/white, cozy, modern. Brand colors available as Tailwind classes `brand-50` … `brand-900` (lavender scale). Cards: `Card` component (rounded-2xl, soft shadow). Page structure: `PageHeader` → stats row (`StatCard`, optional) → filter bar → content grid/list → modals. Text: headings `text-brand-900`, muted `text-zinc-500`/`text-zinc-400`. Keep hover transitions subtle. Empty states always get an `EmptyState` with a friendly hint and a CTA. Mobile-first responsive (`sm:` / `lg:` grids).
 
-## AI features: PLACEHOLDERS ONLY (current build phase)
+## AI features: WIRED (except chat + AI math practice)
 
-Do NOT wire any UI to `/api/ai` or `@/lib/ai-client` yet. Wherever the product design calls for an AI capability (document review, plan generation, smart outreach suggestions, opportunity scanning, chat), render a clearly-styled placeholder instead: a `Card` with a `Sparkles` icon (lucide), a short title like "AI review — coming soon", one sentence describing what it will do, and a disabled `Button`. Keep the placeholder visually cozy (bg-brand-50, dashed border works well). The surrounding non-AI feature must be fully functional without it.
+AI features are live. Call them with `callAI(task, payload)` from `@/lib/ai-client` inside `startTransition`/async handlers. Tasks: `review_document`, `plan`, `outreach`, `opportunities`, `parse_contact` (see `app/api/ai/route.ts` for payloads/results). Handle every branch of `AiResult`:
+- `setup` → render the setup string in a friendly info card (API key missing — not an error state).
+- `upgrade` → the surface should already be behind `<TierGate>`, but render the error text defensively.
+- `error` → inline error text; keep prior results visible.
+- Loading: `Spinner` + disabled button while the call runs.
+
+Exceptions that STAY placeholders: the AI Chat page (`/dashboard/chat`) and the Math Gym "AI Practice" tab.
+
+## Tier gating
+
+Tiers: `free` ("Still Cold") / `warming` ("Warming Up", $4/mo) / `heat` ("In The Heat", $10/mo). Definitions + feature matrix in `lib/tiers.ts`; the user's tier comes from `useTier()` (`@/components/tier-context`, provided by the dashboard layout). Gate locked UI with `<TierGate feature=... title=... blurb=... perks?=... variant="page"|"card">` from `@/components/tier-gate` — page variant for whole sections (Practice), card variant for feature cards (AI review, scanner). The API route also enforces tiers server-side. Free tier includes everything except the Practice section and AI features (`parse_contact` LinkedIn import is intentionally free); `warming` adds Practice + the AI opportunity scanner; `heat` adds everything else.
 
 ## Supabase from the browser
 

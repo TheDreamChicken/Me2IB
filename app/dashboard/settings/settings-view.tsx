@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, GraduationCap, Palette } from "lucide-react";
+import { Check, GraduationCap, Palette, Trash2 } from "lucide-react";
 import { Card, PageHeader, cn } from "@/components/ui";
 import { useLearningPref, type PrefKey } from "@/components/learning-prefs";
+import { DELETE_CONFIRMATION_KEY } from "./delete-button";
 
 // Ordered as light/dark pairs — each light theme has a darker sibling.
 const THEMES = [
@@ -40,31 +41,62 @@ const THEMES = [
   {
     value: "forest",
     label: "Forest",
-    hint: "Sage at midnight — mossy and cozy.",
+    hint: "Sage at dawn — mossy and cozy.",
     swatches: ["#0e130f", "#4f8a55", "#e6efe4"],
   },
 ] as const;
 
+function currentTheme(): string {
+  return document.documentElement.dataset.theme || "lavender";
+}
+
+function confirmationEnabled(): boolean {
+  try {
+    return localStorage.getItem(DELETE_CONFIRMATION_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function applyTheme(value: string) {
+  if (value === "lavender") {
+    delete document.documentElement.dataset.theme;
+    try {
+      localStorage.removeItem("me2ib-theme");
+    } catch {}
+  } else {
+    document.documentElement.dataset.theme = value;
+    try {
+      localStorage.setItem("me2ib-theme", value);
+    } catch {}
+  }
+}
+
 export function SettingsView() {
   const [theme, setTheme] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(true);
 
   useEffect(() => {
-    setTheme(document.documentElement.dataset.theme || "lavender");
+    const id = setTimeout(() => {
+      setTheme(currentTheme());
+      setConfirmDelete(confirmationEnabled());
+    }, 0);
+    return () => clearTimeout(id);
   }, []);
 
   function pick(value: string) {
     setTheme(value);
-    if (value === "lavender") {
-      delete document.documentElement.dataset.theme;
+    applyTheme(value);
+  }
+
+  function toggleDeleteConfirmation() {
+    setConfirmDelete((current) => {
+      const next = !current;
       try {
-        localStorage.removeItem("me2ib-theme");
+        localStorage.setItem(DELETE_CONFIRMATION_KEY, String(next));
       } catch {}
-    } else {
-      document.documentElement.dataset.theme = value;
-      try {
-        localStorage.setItem("me2ib-theme", value);
-      } catch {}
-    }
+      return next;
+    });
   }
 
   return (
@@ -153,6 +185,65 @@ export function SettingsView() {
           />
         </div>
       </Card>
+
+      <Card className="mt-6 p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
+            <Trash2 className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-brand-900">Delete confirmation</h2>
+            <p className="text-sm text-zinc-500">
+              Choose whether destructive buttons need a second click.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem] sm:items-center">
+          <div>
+            <p className="font-medium text-brand-900">Confirm again to delete</p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              Applies to contacts, applications, events, documents, experiences,
+              opportunities, and stories on this device.
+            </p>
+          </div>
+          <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2.5 sm:w-52">
+            <span
+              className={cn(
+                "text-right text-xs font-medium transition-colors",
+                confirmDelete ? "text-zinc-400" : "text-brand-800"
+              )}
+            >
+              Off
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={confirmDelete}
+              aria-label="Confirm again to delete"
+              onClick={toggleDeleteConfirmation}
+              className={cn(
+                "relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors",
+                confirmDelete ? "bg-brand-600" : "bg-brand-200"
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                  confirmDelete && "translate-x-5"
+                )}
+              />
+            </button>
+            <span
+              className={cn(
+                "text-left text-xs font-medium transition-colors",
+                confirmDelete ? "text-brand-800" : "text-zinc-400"
+              )}
+            >
+              On
+            </span>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -173,15 +264,15 @@ function DepthRow({
   const [depth, setDepth] = useLearningPref(prefKey);
   const detailed = depth === "detailed";
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0">
+    <div className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_13rem] sm:items-center">
       <div className="min-w-0">
         <p className="font-medium text-brand-900">{title}</p>
         <p className="mt-0.5 text-xs text-zinc-500">{description}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-2.5">
+      <div className="grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2.5 sm:w-52">
         <span
           className={cn(
-            "text-xs font-medium transition-colors",
+            "text-right text-xs font-medium transition-colors",
             detailed ? "text-zinc-400" : "text-brand-800"
           )}
         >
@@ -207,7 +298,7 @@ function DepthRow({
         </button>
         <span
           className={cn(
-            "text-xs font-medium transition-colors",
+            "text-left text-xs font-medium transition-colors",
             detailed ? "text-brand-800" : "text-zinc-400"
           )}
         >

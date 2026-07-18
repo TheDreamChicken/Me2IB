@@ -385,29 +385,34 @@ export function CalendarView({
         )}
       </Modal>
 
-      {/* Edit */}
+      {/* Persistent day/detail/edit shell: content changes without flashing the page. */}
       <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title="Edit event"
+        open={!!dayKey || !!selected || !!editing}
+        onClose={() => {
+          if (editing) setEditing(null);
+          else if (selected) setSelectedId(null);
+          else setDayKey(null);
+        }}
+        title={
+          editing
+            ? "Edit event"
+            : dayKey
+              ? formatDayKey(dayKey, {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })
+              : ""
+        }
       >
-        {editing && (
+        {editing ? (
           <EventForm
             event={editing}
             contacts={contacts}
             applications={applications}
             onDone={() => setEditing(null)}
           />
-        )}
-      </Modal>
-
-      {/* Detail */}
-      <Modal
-        open={!!selected && !editing}
-        onClose={() => setSelectedId(null)}
-        title=""
-      >
-        {selected && (
+        ) : selected ? (
           <EventDetail
             event={selected}
             contact={contactFor(selected)}
@@ -415,24 +420,7 @@ export function CalendarView({
             onClose={() => setSelectedId(null)}
             onEdit={() => setEditing(selected)}
           />
-        )}
-      </Modal>
-
-      {/* Day list ("+N more") */}
-      <Modal
-        open={!!dayKey}
-        onClose={() => setDayKey(null)}
-        title={
-          dayKey
-            ? formatDayKey(dayKey, {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })
-            : ""
-        }
-      >
-        {dayKey && (
+        ) : dayKey ? (
           <div className="space-y-2">
             {(eventsByDay.get(dayKey) ?? []).map((e) => (
               <EventRow
@@ -450,7 +438,7 @@ export function CalendarView({
               />
             ))}
           </div>
-        )}
+        ) : null}
       </Modal>
     </div>
   );

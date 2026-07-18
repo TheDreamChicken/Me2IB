@@ -2,8 +2,93 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { TIER_INFO, TIER_ORDER, type TierId } from "@/lib/tiers";
 
 export type ActionResult = { error?: string; ok?: boolean };
+
+export async function setProfileAvatar(
+  hasAvatar: boolean
+): Promise<ActionResult & { avatarUrl?: string | null }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const path = `${user.id}/avatar`;
+  let avatarUrl: string | null = null;
+  if (hasAvatar) {
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    avatarUrl = `${data.publicUrl}?v=${Date.now()}`;
+  } else {
+    // Best effort: clearing the profile should still work if the object was
+    // already missing.
+    const { error } = await supabase.storage.from("avatars").remove([path]);
+    if (error) console.error("Could not remove profile avatar:", error.message);
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .upsert(
+      { user_id: user.id, avatar_url: avatarUrl },
+      { onConflict: "user_id" }
+    );
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/account");
+  revalidatePath("/dashboard", "layout");
+  return { ok: true, avatarUrl };
+}
+
+// Demo access codes — redeemed server-side only so they never ship to the client.
+const ACCESS_CODES: Record<string, TierId> = {
+  JPRYAN: "heat",
+  JPN: "warming",
+};
+
+async function setTier(tier: TierId): Promise<ActionResult & { tier?: TierId }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .upsert({ user_id: user.id, tier }, { onConflict: "user_id" });
+  if (error) return { error: error.message };
+
+  // "layout" so the sidebar tier subtext refreshes everywhere.
+  revalidatePath("/dashboard", "layout");
+  return { ok: true, tier };
+}
+
+/** Redeem a demo access code (e.g. from a promo) to switch tiers instantly. */
+export async function redeemAccessCode(
+  code: string
+): Promise<ActionResult & { tier?: TierId; tierLabel?: string }> {
+  const cleaned = code.trim().toUpperCase();
+  if (!cleaned) return { error: "Type a code first." };
+  const tier = ACCESS_CODES[cleaned];
+  if (!tier) {
+    return { error: "That code didn't match anything — double-check it?" };
+  }
+  const result = await setTier(tier);
+  if (result.error) return result;
+  return { ...result, tierLabel: TIER_INFO[tier].label };
+}
+
+/**
+ * Demo checkout: real payments aren't hooked up yet, so "purchasing" a plan
+ * (or downgrading) just records the tier on the profile. When Stripe lands,
+ * this becomes the post-checkout webhook's job instead.
+ */
+export async function changeTier(tier: string): Promise<ActionResult> {
+  if (!TIER_ORDER.includes(tier as TierId)) {
+    return { error: "Unknown plan." };
+  }
+  return setTier(tier as TierId);
+}
 
 function str(formData: FormData, key: string): string | null {
   const v = String(formData.get(key) ?? "").trim();

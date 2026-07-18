@@ -29,7 +29,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // No h-full here: html must wrap the full document so the body's
+      // page-length background gradient (globals.css) spans the whole page.
+      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       // The theme script below stamps data-theme before hydration; React
       // shouldn't warn about that attribute differing from the server HTML.
       suppressHydrationWarning

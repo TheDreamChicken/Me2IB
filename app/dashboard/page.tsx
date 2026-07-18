@@ -129,6 +129,9 @@ export default async function DashboardOverviewPage() {
   // Layout already gates this route; defense in depth for TS + safety.
   if (!user) redirect("/login?next=/dashboard");
 
+  // A request-time snapshot is intentional in this dynamic server page: all
+  // staleness/deadline calculations below use the same instant.
+  // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const [contactsRes, appsRes, eventsRes, weekCountRes, profileRes] =
     await Promise.all([

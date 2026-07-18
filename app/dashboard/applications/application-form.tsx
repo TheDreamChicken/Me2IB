@@ -12,6 +12,7 @@ import {
   TIERS,
 } from "@/lib/constants";
 import { upsertApplication } from "@/lib/actions/applications";
+import { callAI } from "@/lib/ai-client";
 import {
   Button,
   Field,
@@ -126,22 +127,140 @@ function initialValues(app: Application | null): FormValues {
 /* Small pieces                                                        */
 /* ------------------------------------------------------------------ */
 
-/** AI autofill placeholder — ships later; disabled on purpose. */
-function AutofillPlaceholder() {
+type JobPostingAutofill = Partial<
+  Pick<
+    FormValues,
+    | "company"
+    | "position"
+    | "industry"
+    | "location"
+    | "work_type"
+    | "employment_type"
+    | "season"
+    | "pay"
+    | "deadline"
+    | "posting_link"
+    | "application_link"
+  >
+> & { error?: string };
+
+type ScannedPosting = {
+  title: string;
+  company?: string | null;
+  industry?: string | null;
+  location?: string | null;
+  link?: string | null;
+  deadline?: string | null;
+};
+
+function seasonFromTitle(title: string): string | undefined {
+  const match = title.match(/\b(spring|summer|fall|autumn|winter)\b(?:\s+(20\d{2}))?/i);
+  if (!match) return undefined;
+  const raw = match[1].toLowerCase() === "autumn" ? "fall" : match[1].toLowerCase();
+  const name = raw[0].toUpperCase() + raw.slice(1);
+  const year = match[2] ?? title.match(/\b20\d{2}\b/)?.[0];
+  return `${name}${year ? ` ${year}` : ""}`;
+}
+
+function AutofillFromPosting({
+  onFill,
+}: {
+  onFill: (data: JobPostingAutofill) => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  function autofill() {
+    const postingUrl = url.trim();
+    if (!postingUrl) return;
+    setError(null);
+    setDone(false);
+    startTransition(async () => {
+      let directError: string | null = null;
+      try {
+        const response = await fetch(
+          `/dashboard/applications/job-posting?url=${encodeURIComponent(postingUrl)}`
+        );
+        const data = (await response.json()) as JobPostingAutofill;
+        if (response.ok && !data.error && data.company?.trim() && data.position?.trim()) {
+          onFill(data);
+          setDone(true);
+          return;
+        }
+        directError = data.error ?? "The job site blocked direct reading.";
+      } catch {
+        directError = "The job site blocked direct reading.";
+      }
+
+      const fallback = await callAI<ScannedPosting[]>("opportunities", {
+        industries: [],
+        location: "Use the location published in the posting",
+        keywords: `Inspect this exact job posting URL and return this specific role only: ${postingUrl}`,
+      });
+      if (fallback.setup) {
+        setError(fallback.setup);
+        return;
+      }
+      if (fallback.error || fallback.upgrade) {
+        setError(fallback.error ?? directError ?? "Couldn't read that posting.");
+        return;
+      }
+      const match = fallback.data?.find(
+        (item) => item && typeof item.title === "string" && item.title.trim()
+      );
+      if (!match) {
+        setError(directError ?? "Couldn't find job details at that link.");
+        return;
+      }
+      const title = match.title.trim();
+      const lower = title.toLowerCase();
+      onFill({
+        company: match.company ?? undefined,
+        position: title,
+        industry: match.industry ?? undefined,
+        location: match.location ?? undefined,
+        work_type: lower.includes("remote") ? "remote" : undefined,
+        employment_type: lower.includes("intern") ? "internship" : undefined,
+        season: seasonFromTitle(title),
+        deadline: match.deadline ?? undefined,
+        posting_link: match.link ?? postingUrl,
+        application_link: match.link ?? postingUrl,
+      });
+      setDone(true);
+    });
+  }
+
   return (
     <div className="rounded-2xl border border-dashed border-brand-200 bg-brand-50/70 p-3">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 shrink-0 text-brand-400" />
         <Input
-          disabled
-          placeholder="Paste a posting link or drop in a doc — autofill is coming soon"
-          className="bg-white/60 text-xs"
-          aria-label="Autofill from a posting link (coming soon)"
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Paste the direct job posting link"
+          className="bg-white text-xs"
+          aria-label="Autofill from a job posting link"
         />
-        <Button type="button" size="sm" variant="secondary" disabled>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={autofill}
+          disabled={pending || !url.trim()}
+        >
+          {pending ? <Spinner /> : <Sparkles className="h-3.5 w-3.5" />}
           Autofill
         </Button>
       </div>
+      {done && !pending && (
+        <p className="mt-2 text-xs text-emerald-600">
+          Filled the fields published with the posting — give them a quick check.
+        </p>
+      )}
+      {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
     </div>
   );
 }
@@ -229,6 +348,52 @@ export function ApplicationForm({
     });
   }
 
+  function applyAutofill(data: JobPostingAutofill) {
+    setValues((current) => {
+      const next = { ...current };
+      const textKeys = [
+        "company",
+        "position",
+        "location",
+        "season",
+        "pay",
+        "deadline",
+        "posting_link",
+        "application_link",
+      ] as const;
+      for (const key of textKeys) {
+        const value = data[key];
+        if (typeof value === "string" && value.trim()) next[key] = value.trim();
+      }
+      if (
+        typeof data.work_type === "string" &&
+        WORK_TYPES.some((item) => item.value === data.work_type)
+      ) {
+        next.work_type = data.work_type;
+      }
+      if (
+        typeof data.employment_type === "string" &&
+        EMPLOYMENT_TYPES.some((item) => item.value === data.employment_type)
+      ) {
+        next.employment_type = data.employment_type;
+      }
+      if (
+        typeof data.industry === "string" &&
+        INDUSTRIES.some((item) => item.value === data.industry)
+      ) {
+        next.industry = data.industry;
+        const nextSectors = SECTORS[data.industry];
+        const nextTiers = TIERS[data.industry];
+        if (nextSectors && !nextSectors.includes(next.sector)) next.sector = "";
+        if (nextTiers && !nextTiers.some((item) => item.value === next.tier)) {
+          next.tier = "";
+        }
+      }
+      return next;
+    });
+    setError(null);
+  }
+
   function goTo(target: number) {
     if (target > 0 && !values.company.trim()) {
       setStep(0);
@@ -277,7 +442,7 @@ export function ApplicationForm({
       {/* ---- Step 1: The basics ---- */}
       {step === 0 && (
         <div className="space-y-4">
-          <AutofillPlaceholder />
+          <AutofillFromPosting onFill={applyAutofill} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Company *">
               <Input

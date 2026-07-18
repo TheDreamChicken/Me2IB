@@ -13,17 +13,17 @@ import {
   Paperclip,
   PenLine,
   Plus,
-  Sparkles,
 } from "lucide-react";
 import type { Document } from "@/lib/types";
 import { DOC_TYPES, INDUSTRIES, labelFor } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import { deleteDocument, saveDocument } from "@/lib/actions/documents";
+import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
+import { AiReviewSection } from "./ai-review-section";
 import {
   Badge,
   Button,
   Card,
-  DeleteButton,
   EmptyState,
   Field,
   Input,
@@ -39,17 +39,19 @@ import {
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-const DOC_ICONS: Record<string, React.ElementType> = {
-  resume: FileText,
-  cover_letter: Mail,
-  transcript: GraduationCap,
-  essay: PenLine,
-  writing_sample: BookOpen,
-  other: File,
-};
-
-function docIcon(docType: string): React.ElementType {
-  return DOC_ICONS[docType] ?? File;
+function DocumentTypeIcon({
+  docType,
+  className,
+}: {
+  docType: string;
+  className: string;
+}) {
+  if (docType === "resume") return <FileText className={className} />;
+  if (docType === "cover_letter") return <Mail className={className} />;
+  if (docType === "transcript") return <GraduationCap className={className} />;
+  if (docType === "essay") return <PenLine className={className} />;
+  if (docType === "writing_sample") return <BookOpen className={className} />;
+  return <File className={className} />;
 }
 
 function formatDate(iso: string) {
@@ -157,13 +159,14 @@ function DocumentForm({
   }
 
   return (
-    <form action={submit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(new FormData(e.currentTarget));
+      }}
+      className="space-y-4"
+    >
       {doc && <input type="hidden" name="id" value={doc.id} />}
-      {/* Preserve legacy pasted text on metadata edits — the action would
-          otherwise null it out when the field is missing from the form. */}
-      {isEdit && doc?.content_text && (
-        <input type="hidden" name="content_text" value={doc.content_text} />
-      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name *">
@@ -212,7 +215,7 @@ function DocumentForm({
       {!isEdit && (
         <Field
           label="File *"
-          hint="By this point it deserves to be a real PDF — Word docs welcome too."
+          hint="AI review reads uploaded PDFs directly; other file types can still be stored here."
         >
           <input
             type="file"
@@ -265,7 +268,6 @@ function DocumentDetail({
   const [pending, startTransition] = useTransition();
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const Icon = docIcon(doc.doc_type);
 
   async function download() {
     if (!doc.file_path) return;
@@ -290,7 +292,7 @@ function DocumentDetail({
       {/* Header block */}
       <div className="flex items-start gap-4 rounded-2xl bg-gradient-to-br from-brand-100 via-brand-50 to-white p-5">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-200 text-brand-700">
-          <Icon className="h-7 w-7" />
+          <DocumentTypeIcon docType={doc.doc_type} className="h-7 w-7" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="text-lg font-semibold text-brand-900">{doc.name}</h3>
@@ -337,37 +339,8 @@ function DocumentDetail({
         </div>
       )}
 
-      {doc.content_text && (
-        <div>
-          <p className="mb-1 text-xs font-medium text-zinc-400">Content</p>
-          <div className="max-h-64 overflow-y-auto rounded-xl bg-brand-50 p-4">
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-brand-900">
-              {doc.content_text}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* AI review placeholder */}
-      <Card className="border-dashed bg-brand-50/60 p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-brand-900">
-              AI feedback — coming soon
-            </p>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              Honest strengths + critical improvements tuned to your target
-              industry.
-            </p>
-          </div>
-          <Button size="sm" variant="secondary" disabled>
-            Review
-          </Button>
-        </div>
-      </Card>
+      {/* AI review (heat tier) — persists to the row, so it survives reopen. */}
+      <AiReviewSection doc={doc} />
 
       {error && (
         <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
@@ -497,7 +470,6 @@ export function DocumentsView({ documents }: { documents: Document[] }) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((d) => {
-            const Icon = docIcon(d.doc_type);
             return (
               <Card
                 key={d.id}
@@ -506,7 +478,7 @@ export function DocumentsView({ documents }: { documents: Document[] }) {
               >
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
-                    <Icon className="h-5 w-5" />
+                    <DocumentTypeIcon docType={d.doc_type} className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-brand-900">
@@ -551,32 +523,25 @@ export function DocumentsView({ documents }: { documents: Document[] }) {
         <DocumentForm doc={null} onDone={() => setAdding(false)} />
       </Modal>
 
-      {/* Edit */}
+      {/* Persistent detail/edit shell avoids replaying the modal entrance. */}
       <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title="Edit document"
+        open={!!selected}
+        onClose={() => {
+          if (editing) setEditing(null);
+          else setSelectedId(null);
+        }}
+        title={editing ? "Edit document" : ""}
         wide
       >
-        {editing && (
+        {editing ? (
           <DocumentForm doc={editing} onDone={() => setEditing(null)} />
-        )}
-      </Modal>
-
-      {/* Detail */}
-      <Modal
-        open={!!selected && !editing}
-        onClose={() => setSelectedId(null)}
-        title=""
-        wide
-      >
-        {selected && (
+        ) : selected ? (
           <DocumentDetail
             doc={selected}
             onClose={() => setSelectedId(null)}
             onEdit={() => setEditing(selected)}
           />
-        )}
+        ) : null}
       </Modal>
     </div>
   );

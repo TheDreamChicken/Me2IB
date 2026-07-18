@@ -1,19 +1,25 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Markdown from "react-markdown";
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarClock,
   CheckCircle2,
   Compass,
   GraduationCap,
   Map,
+  RefreshCw,
   Sparkles,
   Sun,
 } from "lucide-react";
-import type { Profile } from "@/lib/types";
+import type { Plan, Profile } from "@/lib/types";
 import { INDUSTRIES, STANDINGS, labelFor } from "@/lib/constants";
-import { savePlanProfile } from "@/lib/actions/plan-profile";
+import { saveAiPlan, savePlanProfile } from "@/lib/actions/plan-profile";
+import { callAI } from "@/lib/ai-client";
 import { useNow } from "@/components/use-today";
+import { TierGate } from "@/components/tier-gate";
 import {
   Badge,
   Button,
@@ -42,14 +48,10 @@ function PlanProfileForm({
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  // The industry select is CONTROLLED and re-synced from the server whenever
-  // a save round-trips. Why: React 19 auto-resets uncontrolled form fields
-  // after a <form action> completes, and for a <select> the reset snaps back
-  // to the option selected at *mount time* (React never re-applies a changed
-  // `defaultValue` to a mounted select). Controlled state sidesteps that.
-  const savedIndustry = profile?.target_industries?.[0] ?? "";
-  const [industry, setIndustry] = useState(savedIndustry);
-  useEffect(() => setIndustry(savedIndustry), [savedIndustry]);
+  const savedIndustries = (profile?.target_industries ?? []).filter((value) =>
+    INDUSTRIES.some((industry) => industry.value === value)
+  );
+  const [industries, setIndustries] = useState<string[]>(savedIndustries);
 
   // Old profile rows may still hold the retired "standard" value (or other
   // junk) — treat anything we don't recognize as unset.
@@ -68,6 +70,10 @@ function PlanProfileForm({
   }
 
   function submit(formData: FormData) {
+    if (industries.length === 0) {
+      setError("Pick at least one target industry.");
+      return;
+    }
     setError(null);
     setSaved(false);
     startTransition(async () => {
@@ -77,6 +83,24 @@ function PlanProfileForm({
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
       }
+    });
+  }
+
+  function toggleIndustry(value: string) {
+    setIndustries((current) =>
+      current.includes(value)
+        ? current.filter((industry) => industry !== value)
+        : [...current, value]
+    );
+  }
+
+  function moveIndustry(index: number, direction: -1 | 1) {
+    setIndustries((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
     });
   }
 
@@ -94,20 +118,29 @@ function PlanProfileForm({
         </div>
       </div>
 
-      {/* Keyed on updated_at: after a successful save the revalidated profile
-          arrives with a new timestamp, remounting the form so every
-          uncontrolled field re-seeds from what's actually stored. */}
       <form
         key={profile ? profile.updated_at : "new"}
-        action={submit}
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit(new FormData(event.currentTarget));
+        }}
         className="space-y-4"
       >
+        {industries.map((industry) => (
+          <input
+            key={industry}
+            type="hidden"
+            name="target_industries"
+            value={industry}
+          />
+        ))}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="School">
+          <Field label="School *">
             <Input
               name="school"
               placeholder="e.g. University of Michigan"
               defaultValue={profile?.school ?? ""}
+              required
             />
           </Field>
           <Field label="Graduation month *">
@@ -142,12 +175,11 @@ function PlanProfileForm({
               ))}
             </Select>
           </Field>
-          <Field
-            label="Standing"
-            hint="Not sure? Leave it — we’ll work it out from your grad date."
-          >
-            <Select name="standing" defaultValue={savedStanding}>
-              <option value="">Not sure — figure it out for me</option>
+          <Field label="Standing *">
+            <Select name="standing" defaultValue={savedStanding} required>
+              <option value="" disabled>
+                Pick your standing…
+              </option>
               {STANDINGS.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
@@ -155,23 +187,81 @@ function PlanProfileForm({
               ))}
             </Select>
           </Field>
-          <Field label="Target industry *">
-            <Select
-              name="target_industry"
-              value={industry}
-              onChange={(e) => setIndustry(e.target.value)}
-              required
-            >
-              <option value="" disabled>
-                Pick an industry…
-              </option>
-              {INDUSTRIES.map((i) => (
-                <option key={i.value} value={i.value}>
-                  {i.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <fieldset className="sm:col-span-2 lg:col-span-3">
+            <legend className="text-xs font-medium text-brand-900/70">
+              Target industries *
+            </legend>
+            <p className="mt-1 text-xs text-zinc-400">
+              Check every path you&apos;re considering, then rank them so the AI
+              knows what comes first.
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {INDUSTRIES.map((item) => {
+                const checked = industries.includes(item.value);
+                const rank = industries.indexOf(item.value) + 1;
+                return (
+                  <label
+                    key={item.value}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors",
+                      checked
+                        ? "border-brand-400 bg-brand-50 text-brand-900"
+                        : "border-brand-100 bg-white text-zinc-500 hover:border-brand-300"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleIndustry(item.value)}
+                      className="accent-brand-600"
+                    />
+                    <span className="min-w-0 flex-1">{item.label}</span>
+                    {checked && (
+                      <span className="text-[10px] font-semibold text-brand-500">
+                        #{rank}
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+            {industries.length > 0 && (
+              <div className="mt-3 space-y-1.5 rounded-xl bg-brand-50/70 p-3">
+                {industries.map((value, index) => (
+                  <div key={value} className="flex items-center gap-2">
+                    <span className="w-16 shrink-0 text-[11px] font-semibold text-brand-500">
+                      Priority {index + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm text-brand-900">
+                      {labelFor(INDUSTRIES, value)}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="px-2"
+                      onClick={() => moveIndustry(index, -1)}
+                      disabled={index === 0}
+                      aria-label={`Move ${labelFor(INDUSTRIES, value)} up`}
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="px-2"
+                      onClick={() => moveIndustry(index, 1)}
+                      disabled={index === industries.length - 1}
+                      aria-label={`Move ${labelFor(INDUSTRIES, value)} down`}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </fieldset>
         </div>
 
         {error && (
@@ -247,13 +337,16 @@ function WhereYouStand({
   contactsCount,
   applicationsCount,
   now,
+  industry,
+  priority,
 }: {
   profile: Profile | null;
   contactsCount: number;
   applicationsCount: number;
   now: Date;
+  industry: string | null;
+  priority?: number;
 }) {
-  const industry = profile?.target_industries?.[0] ?? null;
   const ready = Boolean(profile?.grad_year && profile?.grad_month && industry);
 
   if (!ready || !profile) {
@@ -306,10 +399,19 @@ function WhereYouStand({
         <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
           <Map className="h-5 w-5" />
         </div>
-        <h2 className="font-semibold text-brand-900">Where you stand</h2>
-        <Badge className="ml-auto bg-brand-600 text-white">
-          {PHASE_STEPS[t.phaseIndex].label}
-        </Badge>
+        <h2 className="font-semibold text-brand-900">
+          Where you stand — {labelFor(INDUSTRIES, industry!)}
+        </h2>
+        <div className="ml-auto flex items-center gap-2">
+          {priority && (
+            <Badge className="bg-brand-100 text-brand-700">
+              Priority {priority}
+            </Badge>
+          )}
+          <Badge className="bg-brand-600 text-white">
+            {PHASE_STEPS[t.phaseIndex].label}
+          </Badge>
+        </div>
       </div>
 
       <p className="rounded-2xl bg-gradient-to-br from-brand-100 via-brand-50 to-white p-4 text-sm leading-relaxed text-brand-900">
@@ -390,7 +492,7 @@ const ROADMAP: {
     title: "Sophomore spring",
     tagline: "Go time — banking AND consulting",
     bullets: [
-      "IB applications for junior summer open January–June — yes, a year and a half early. Apply as soon as they open; review is rolling.",
+      "IB timing varies by firm: some junior-summer processes appear in sophomore winter or spring, while others open in summer or early junior fall. Track every target firm now and apply as soon as its window opens.",
       "Consulting now runs on the same clock: MBB applications for junior summer open this spring too, and sophomore/diversity programs open even earlier. If consulting's your lane, you should already be casing.",
       "Turn your best relationships into referrals — a referral means an employee formally recommends you, which can move your resume to the top of the pile.",
       "Get interview-ready before you submit: HireVues (recorded video interviews) and first rounds arrive fast — technicals for banking, live cases for consulting.",
@@ -458,30 +560,281 @@ function Roadmap101() {
 }
 
 /* ------------------------------------------------------------------ */
-/* AI placeholder                                                      */
+/* AI roadmap (heat tier)                                              */
 /* ------------------------------------------------------------------ */
 
-function AiPlanPlaceholder() {
+const LONG_PLAN_CHARS = 3000;
+
+function AiPlanSection({
+  profile,
+  contactsCount,
+  applicationsCount,
+  plan,
+}: {
+  profile: Profile | null;
+  contactsCount: number;
+  applicationsCount: number;
+  plan: Plan | null;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [setup, setSetup] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Freshly generated plan, shown immediately while revalidation catches up.
+  const [fresh, setFresh] = useState<{ markdown: string; at: string } | null>(
+    null
+  );
+  const [expanded, setExpanded] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!pending) return;
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [pending]);
+
+  const markdown = fresh?.markdown ?? plan?.plan_markdown ?? null;
+  const generatedAt = fresh?.at ?? plan?.updated_at ?? null;
+  const isLong = (markdown?.length ?? 0) > LONG_PLAN_CHARS;
+  const planProfileMismatch = Boolean(
+    !fresh &&
+      plan &&
+      profile &&
+      (plan.target_industry !==
+        (profile.target_industries?.[0] ?? null) ||
+        plan.grad_year !== profile.grad_year ||
+        plan.grad_month !== profile.grad_month ||
+        plan.standing !== profile.standing)
+  );
+
+  const profileReady = Boolean(
+    profile?.school?.trim() &&
+      profile?.grad_year &&
+      profile?.grad_month &&
+      profile?.standing &&
+      profile?.target_industries?.length
+  );
+  const missingProfileFields = [
+    !profile?.school?.trim() && "school",
+    !profile?.grad_month && "graduation month",
+    !profile?.grad_year && "graduation year",
+    !profile?.standing && "year standing",
+    !profile?.target_industries?.length && "at least one target industry",
+  ].filter(Boolean) as string[];
+
+  function generate() {
+    if (!profileReady) return;
+    setElapsed(0);
+    setError(null);
+    setSetup(null);
+    startTransition(async () => {
+      let profilePayload: Record<string, unknown> = {};
+      let timelineAnchors: Record<string, unknown>[] = [];
+      if (profile) {
+        // Explicitly whitelist recruiting context; identifiers and account
+        // metadata have no business going to the model.
+        profilePayload = {
+          school: profile.school,
+          majors: profile.majors,
+          minors: profile.minors,
+          certificates: profile.certificates,
+          grad_year: profile.grad_year,
+          grad_month: profile.grad_month,
+          standing: profile.standing,
+          gpa: profile.gpa,
+          city: profile.city,
+          clubs: profile.clubs,
+          professional_summary: profile.professional_summary,
+          personal_interests: profile.personal_interests,
+          fun_facts: profile.fun_facts,
+          target_industry_priorities: profile.target_industries.map(
+            (value, index) => ({
+              rank: index + 1,
+              industry: labelFor(INDUSTRIES, value),
+            })
+          ),
+        };
+
+        if (profile.grad_year && profile.grad_month) {
+          const generatedNow = new Date();
+          timelineAnchors = profile.target_industries.map((industry) => {
+            const timeline = computeTimeline({
+              gradYear: profile.grad_year!,
+              gradMonth: profile.grad_month!,
+              standing: profile.standing,
+              industry,
+              contactsCount,
+              applicationsCount,
+              now: generatedNow,
+            });
+            return {
+              industry: labelFor(INDUSTRIES, industry),
+              target_internship_summer: timeline.targetSummerYear,
+              applications_watch_window_starts: timeline.appsOpenLabel,
+              major_windows_can_run_through: timeline.appsCloseLabel,
+              current_phase: timeline.phase,
+              timing_note: timeline.cycleNote,
+            };
+          });
+        }
+      }
+
+      const res = await callAI("plan", {
+        profile: profilePayload,
+        stats: { contactsCount, applicationsCount },
+        timelineAnchors,
+      });
+      if (res.setup) {
+        setSetup(res.setup);
+        return;
+      }
+      if (res.upgrade) {
+        // The TierGate should catch this first — belt and suspenders.
+        setError(
+          res.error ??
+            `This needs the ${res.upgrade.neededLabel} plan — upgrade in Account → Plan.`
+        );
+        return;
+      }
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      const text = res.text?.trim();
+      if (!text) {
+        setError("No plan came back — try again.");
+        return;
+      }
+
+      setFresh({ markdown: text, at: new Date().toISOString() });
+      setExpanded(false);
+      const saved = await saveAiPlan(text, {
+        target_industry: profile?.target_industries?.[0] ?? null,
+        grad_year: profile?.grad_year ?? null,
+        grad_month: profile?.grad_month ?? null,
+        standing: profile?.standing ?? null,
+      });
+      if (saved.error) {
+        setError(
+          `Your plan is ready below, but it couldn't be saved and won't survive a reload: ${saved.error}`
+        );
+      }
+    });
+  }
+
   return (
-    <div className="rounded-2xl border border-dashed border-brand-300 bg-brand-50/70 p-6 card-shadow">
-      <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-        <div className="rounded-2xl bg-brand-100 p-3 text-brand-600">
-          <Sparkles className="h-6 w-6" />
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
+          <Sparkles className="h-5 w-5" />
         </div>
-        <div className="flex-1">
-          <h2 className="font-semibold text-brand-900">
-            Personalized AI roadmap — coming soon
-          </h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            A month-by-month plan built from YOUR tracker, school, and
-            timeline.
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold text-brand-900">Your AI roadmap</h2>
+          <p className="text-xs text-zinc-500">
+            {markdown && generatedAt
+              ? `Generated ${new Date(generatedAt).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                  timeZone: "UTC", // pin it: SSR and client must agree on the day
+                })}`
+              : "A month-by-month plan built from your actual tracker, school, and timeline."}
           </p>
         </div>
-        <Button disabled>
-          <Sparkles className="h-4 w-4" /> Generate my plan
+        <Button
+          onClick={generate}
+          disabled={pending || !profileReady}
+          variant={markdown ? "secondary" : "primary"}
+          size={markdown ? "sm" : "md"}
+        >
+          {pending ? (
+            <Spinner />
+          ) : markdown ? (
+            <>
+              <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" /> Generate my plan
+            </>
+          )}
         </Button>
       </div>
-    </div>
+
+      {!profileReady && !pending && (
+        <div className="mt-3 rounded-xl border border-brand-100 bg-brand-50/60 px-3 py-2 text-xs text-zinc-500">
+          Complete and save {missingProfileFields.join(", ")} above to unlock
+          AI generation. Your industry order becomes the roadmap priority order.
+        </div>
+      )}
+
+      {planProfileMismatch && !pending && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+          Your recruiting inputs have changed since this roadmap was generated.
+          Regenerate it to use your current graduation date, standing, and
+          industry priorities.
+        </div>
+      )}
+
+      {pending && (
+        <div className="mt-4 flex items-start gap-3 rounded-xl bg-brand-50 p-4">
+          <Spinner className="mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-brand-900">
+              Writing your month-by-month roadmap…
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
+              This genuinely takes a minute or two — it reads your timeline and
+              tracker stats and writes the whole plan in one go. {elapsed}s so
+              far.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {setup && (
+        <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3 text-sm leading-relaxed text-brand-700">
+          <span className="font-medium">
+            AI isn&apos;t set up yet — one quick step:
+          </span>{" "}
+          {setup}
+        </div>
+      )}
+
+      {error && (
+        <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
+          {error}
+        </p>
+      )}
+
+      {markdown && (
+        <div className="mt-4">
+          <div
+            className={cn(
+              "relative",
+              isLong && !expanded && "max-h-[30rem] overflow-hidden"
+            )}
+          >
+            <div className="prose-cozy rounded-xl bg-brand-50/40 p-4 text-sm sm:p-5">
+              <Markdown>{markdown}</Markdown>
+            </div>
+            {isLong && !expanded && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 rounded-b-xl bg-gradient-to-b from-transparent to-white" />
+            )}
+          </div>
+          {isLong && (
+            <div className="mt-2 flex justify-center">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setExpanded((v) => !v)}
+              >
+                {expanded ? "Show less" : "Show the full plan"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -493,10 +846,12 @@ export function PlanView({
   profile,
   contactsCount,
   applicationsCount,
+  plan,
 }: {
   profile: Profile | null;
   contactsCount: number;
   applicationsCount: number;
+  plan: Plan | null;
 }) {
   // Hydration-safe clock: null during SSR/first render, then the browser's.
   const now = useNow();
@@ -509,20 +864,55 @@ export function PlanView({
       />
 
       <div className="space-y-6">
-        <PlanProfileForm profile={profile} now={now} />
+        <PlanProfileForm
+          key={profile?.updated_at ?? "new"}
+          profile={profile}
+          now={now}
+        />
         {now ? (
-          <WhereYouStand
-            profile={profile}
-            contactsCount={contactsCount}
-            applicationsCount={applicationsCount}
-            now={now}
-          />
+          profile?.target_industries?.length ? (
+            profile.target_industries
+              .filter((value) =>
+                INDUSTRIES.some((industry) => industry.value === value)
+              )
+              .map((industry, index) => (
+                <WhereYouStand
+                  key={industry}
+                  profile={profile}
+                  contactsCount={contactsCount}
+                  applicationsCount={applicationsCount}
+                  now={now}
+                  industry={industry}
+                  priority={index + 1}
+                />
+              ))
+          ) : (
+            <WhereYouStand
+              profile={profile}
+              contactsCount={contactsCount}
+              applicationsCount={applicationsCount}
+              now={now}
+              industry={null}
+            />
+          )
         ) : (
           <Card className="flex items-center justify-center p-8">
             <Spinner />
           </Card>
         )}
-        <AiPlanPlaceholder />
+        <TierGate
+          feature="ai_plan"
+          title="AI-personalized roadmap"
+          blurb="A month-by-month plan built from your actual tracker, school, and timeline."
+          variant="card"
+        >
+          <AiPlanSection
+            profile={profile}
+            contactsCount={contactsCount}
+            applicationsCount={applicationsCount}
+            plan={plan}
+          />
+        </TierGate>
         <Roadmap101 />
       </div>
     </div>

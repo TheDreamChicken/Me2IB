@@ -4,7 +4,8 @@ export type AiResult<T = unknown> = {
   text?: string;
   data?: T;
   error?: string;
-  setup?: string; // present when ANTHROPIC_API_KEY is missing — show setup instructions
+  setup?: string; // present when no AI key (ANTHROPIC_API_KEY / OPENAI_API_KEY) is set — show setup instructions
+  upgrade?: { needed: string; neededLabel: string }; // present when the user's tier doesn't cover the task
 };
 
 export async function callAI<T = unknown>(

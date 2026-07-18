@@ -29,7 +29,8 @@ import {
   deleteApplication,
   setApplicationStatus,
 } from "@/lib/actions/applications";
-import { Badge, Button, DeleteButton, Select, Spinner, cn } from "@/components/ui";
+import { Badge, Button, Select, Spinner, cn } from "@/components/ui";
+import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
 import { useNow } from "@/components/use-today";
 import {
   CompanyLogo,
@@ -360,7 +361,7 @@ export function ApplicationDetail({
               value={app.status}
               disabled={pending}
               onChange={(e) => changeStatus(e.target.value)}
-              className="w-auto text-xs"
+              className="w-auto [&_select]:text-xs"
             >
               {APPLICATION_STATUSES.map((s) => (
                 <option key={s.value} value={s.value}>

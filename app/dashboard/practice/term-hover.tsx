@@ -69,9 +69,15 @@ const POP_WIDTH = 300;
 
 function TermHover({ term, children }: { term: KeyTerm; children: string }) {
   const triggerRef = useRef<HTMLSpanElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
+  const [pos, setPos] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    maxH: number;
+  } | null>(null);
   const [prefDepth] = useLearningPref("terms");
   const [override, setOverride] = useState<Depth | null>(null);
   const depth = override ?? prefDepth;
@@ -84,7 +90,19 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
       window.innerWidth - POP_WIDTH - 8
     );
     const above = rect.top > 220;
-    setPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, above });
+    // Anchor the "above" case with CSS `bottom` (no inline transform) so it
+    // can't fight the animate-fade-up keyframe, which animates transform.
+    // maxH clamps the box inside the viewport: detailed mode can run taller
+    // than the space between the trigger and the screen edge.
+    setPos(
+      above
+        ? { bottom: window.innerHeight - rect.top + 8, left, maxH: rect.top - 16 }
+        : {
+            top: rect.bottom + 8,
+            left,
+            maxH: window.innerHeight - rect.bottom - 16,
+          }
+    );
   }
 
   function scheduleOpen() {
@@ -105,21 +123,33 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
     if (closeTimer.current) clearTimeout(closeTimer.current);
   }
 
-  // Close on scroll/resize/Escape — cheaper than tracking the trigger around.
+  // Close when the page moves, but keep the popover open while the user
+  // scrolls its own detailed content.
   useEffect(() => {
     if (!pos) return;
     const close = () => {
       setPos(null);
       setOverride(null);
     };
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (
+        popRef.current &&
+        target instanceof Node &&
+        popRef.current.contains(target)
+      ) {
+        return;
+      }
+      close();
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
-    window.addEventListener("scroll", close, true);
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", close);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", close);
       window.removeEventListener("keydown", onKey);
     };
@@ -159,15 +189,18 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
       {pos &&
         createPortal(
           <div
+            ref={popRef}
             role="tooltip"
             onMouseEnter={cancelClose}
             onMouseLeave={scheduleClose}
             style={{
               position: "fixed",
               top: pos.top,
+              bottom: pos.bottom,
               left: pos.left,
               width: POP_WIDTH,
-              transform: pos.above ? "translateY(-100%)" : undefined,
+              maxHeight: pos.maxH,
+              overflowY: "auto",
               zIndex: 60,
             }}
             className="animate-fade-up rounded-xl border border-brand-200 bg-white p-3.5 shadow-lg card-shadow"
@@ -181,6 +214,9 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      // Belt-and-braces: a resize mid-toggle must never
+                      // let a pending close win.
+                      cancelClose();
                       setOverride(d);
                     }}
                     className={cn(
@@ -198,13 +234,19 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
             {depth === "simple" ? (
               <p className="text-xs leading-relaxed text-zinc-600">{term.plain}</p>
             ) : (
+              // Detailed is a superset of simple: plain first, then depth.
               <div className="space-y-1.5">
+                <p className="text-xs leading-relaxed text-zinc-600">{term.plain}</p>
                 <p className="text-xs leading-relaxed text-zinc-600">
                   {term.deeper.detail}
                 </p>
                 <p className="text-xs leading-relaxed text-zinc-600">
                   <span className="font-semibold text-brand-700">Why it matters: </span>
                   {term.deeper.why}
+                </p>
+                <p className="text-xs leading-relaxed text-zinc-600">
+                  <span className="font-semibold text-brand-700">Watch out: </span>
+                  {term.deeper.trap}
                 </p>
               </div>
             )}

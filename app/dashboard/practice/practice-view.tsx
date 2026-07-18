@@ -98,6 +98,25 @@ function GoDeeperNote({ text }: { text: string }) {
   );
 }
 
+function HoverTermsNote() {
+  return (
+    <p className="flex items-center gap-1.5 px-1 text-xs text-zinc-400">
+      <KeyRound className="h-3.5 w-3.5 shrink-0 text-brand-300" />
+      <span>
+        Dotted-underlined terms are hoverable — mouse over any of them for a
+        plain-English definition. Set your default depth in{" "}
+        <Link
+          href="/dashboard/settings"
+          className="font-medium text-brand-600 underline-offset-2 hover:text-brand-700 hover:underline"
+        >
+          Settings
+        </Link>
+        .
+      </span>
+    </p>
+  );
+}
+
 function AiMockPlaceholder() {
   return (
     <Card className="border-dashed bg-brand-50/70 p-5">
@@ -107,14 +126,16 @@ function AiMockPlaceholder() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-medium text-brand-900">
-            AI mock interviews — coming soon
+            Take deeper prep into AI Chat
           </p>
           <p className="text-sm text-zinc-500">
-            Practice technicals, cases, and behaviorals against an AI
-            interviewer that asks follow-ups and scores your answers.
+            Once it unlocks, AI Chat will run full consulting cases, finance
+            technical mocks, and behavioral interviews with live follow-ups.
           </p>
         </div>
-        <Button disabled>Coming soon</Button>
+        <Link href="/dashboard/chat">
+          <Button variant="secondary">Preview AI Chat</Button>
+        </Link>
       </div>
     </Card>
   );
@@ -166,6 +187,10 @@ export function PracticeView() {
 
       <div key={tab} className="animate-fade-up space-y-4">
         <p className="max-w-3xl px-1 text-sm text-zinc-500">{meta.intro}</p>
+
+        {(tab === "finance" || tab === "consulting" || tab === "behavioral") && (
+          <HoverTermsNote />
+        )}
 
         {tab === "finance" && (
           <>

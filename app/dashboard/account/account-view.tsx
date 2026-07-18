@@ -1,28 +1,37 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  ArrowDown,
   Briefcase,
   CalendarClock,
   CheckCircle2,
   CircleUserRound,
   Crown,
+  ShieldCheck,
   GraduationCap,
   Heart,
   LogOut,
   Mail,
+  ImagePlus,
   Plus,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import type { Profile } from "@/lib/types";
-import { INDUSTRIES, STANDINGS, TIER_LEVELS } from "@/lib/constants";
-import { updateProfile } from "@/lib/actions/profile";
+import { INDUSTRIES, STANDINGS } from "@/lib/constants";
+import { normalizeTier, TIER_INFO } from "@/lib/tiers";
+import { setProfileAvatar, updateProfile } from "@/lib/actions/profile";
 import { signout } from "@/lib/actions/auth";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import {
   Badge,
   Button,
   Card,
+  cn,
   Field,
   Input,
   PageHeader,
@@ -30,6 +39,8 @@ import {
   Spinner,
   Textarea,
 } from "@/components/ui";
+import { PlansSection } from "./plans-section";
+import { AiEngineCard } from "./ai-engine-card";
 
 const MONTH_NAMES = [
   "January",
@@ -45,6 +56,13 @@ const MONTH_NAMES = [
   "November",
   "December",
 ];
+
+const AUTOSAVE_DELAY = 700;
+
+const GPA_ERROR =
+  "GPA needs to be a number between 0.00 and 4.00, shown with two decimals — like 3.87.";
+
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 /* ------------------------------------------------------------------ */
 /* Small pieces                                                        */
@@ -165,16 +183,60 @@ function ListField({
 
 export function AccountView({
   profile,
+  userId,
   email,
   memberSince,
+  aiModel,
+  hasAnthropicKey,
+  hasOpenAIKey,
 }: {
   profile: Profile | null;
+  userId: string;
   email: string | null;
   memberSince: string | null;
+  aiModel: string | null;
+  hasAnthropicKey: boolean;
+  hasOpenAIKey: boolean;
 }) {
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const [status, setStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [gpaError, setGpaError] = useState<string | null>(null);
+  const [, startSaveTransition] = useTransition();
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarPending, startAvatarTransition] = useTransition();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Autosave plumbing lives in refs so timers and flags survive re-renders.
+  // Saves deliberately bypass the form's action prop: React 19 resets every
+  // uncontrolled field after a form action completes, which would wipe edits
+  // typed while a save was in flight.
+  const formRef = useRef<HTMLFormElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef(false);
+  const queuedRef = useRef<FormData | null>(null);
+  const dirtyRef = useRef(false);
+  // Synchronous mirror of gpaError: the GPA input's blur handler sets it just
+  // before the form-level blur handler decides whether to schedule a save.
+  const gpaInvalidRef = useRef(false);
+
+  useEffect(() => {
+    // Capture the form element while mounted: FormData still works on the
+    // detached subtree, and formRef.current may be nulled before cleanup runs.
+    const formEl = formRef.current;
+    return () => {
+      const hadPendingSave = debounceRef.current !== null || dirtyRef.current;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (fadeRef.current) clearTimeout(fadeRef.current);
+      // Flush instead of drop: an edit made just before navigating away
+      // still saves (fire-and-forget — "autosaves as you go" is a promise).
+      if (hadPendingSave && formEl && !gpaInvalidRef.current) {
+        void updateProfile(new FormData(formEl));
+      }
+    };
+  }, []);
 
   // Dynamic study lists — prefill from the array columns, fall back to the
   // legacy single major/minor columns for older profiles.
@@ -208,21 +270,159 @@ export function AccountView({
     ? (String(profile.gpa).match(/\d+(\.\d+)?/)?.[0] ?? "")
     : "";
 
-  const tier =
-    TIER_LEVELS.find((t) => t.value === (profile?.tier ?? "free")) ??
-    TIER_LEVELS[0];
+  const currentTier = normalizeTier(profile?.tier);
+  const tierInfo = TIER_INFO[currentTier];
 
-  function submit(formData: FormData) {
-    setError(null);
-    setSaved(false);
-    startTransition(async () => {
+  function uploadAvatar(file: File | null) {
+    if (!file) return;
+    setAvatarError(null);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setAvatarError("Choose a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError("Choose an image under 5 MB.");
+      return;
+    }
+    startAvatarTransition(async () => {
+      const supabase = createBrowserClient();
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(`${userId}/avatar`, file, {
+          upsert: true,
+          contentType: file.type,
+          cacheControl: "3600",
+        });
+      if (uploadError) {
+        setAvatarError(
+          uploadError.message.toLowerCase().includes("bucket")
+            ? "Avatar storage is not ready yet — re-run supabase/schema.sql, then try again."
+            : uploadError.message
+        );
+        return;
+      }
+      const result = await setProfileAvatar(true);
+      if (result.error) {
+        setAvatarError(result.error);
+        return;
+      }
+      setAvatarUrl(result.avatarUrl ?? null);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+      router.refresh();
+    });
+  }
+
+  function removeAvatar() {
+    setAvatarError(null);
+    startAvatarTransition(async () => {
+      const result = await setProfileAvatar(false);
+      if (result.error) {
+        setAvatarError(result.error);
+        return;
+      }
+      setAvatarUrl(null);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+      router.refresh();
+    });
+  }
+
+  function runSave(formData: FormData) {
+    if (inFlightRef.current) {
+      // A save is mid-flight — hold only the freshest snapshot for after.
+      queuedRef.current = formData;
+      return;
+    }
+    inFlightRef.current = true;
+    if (fadeRef.current) {
+      clearTimeout(fadeRef.current);
+      fadeRef.current = null;
+    }
+    setSaveError(null);
+    setStatus("saving");
+    startSaveTransition(async () => {
       const res = await updateProfile(formData);
-      if (res.error) setError(res.error);
-      else {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
+      inFlightRef.current = false;
+      if (queuedRef.current) {
+        const next = queuedRef.current;
+        queuedRef.current = null;
+        runSave(next);
+        return;
+      }
+      if (res.error) {
+        setSaveError(res.error);
+        setStatus("error");
+      } else {
+        setStatus("saved");
+        fadeRef.current = setTimeout(() => {
+          setStatus("idle");
+          fadeRef.current = null;
+        }, 2500);
       }
     });
+  }
+
+  function saveNow() {
+    if (gpaInvalidRef.current || !formRef.current) return;
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    dirtyRef.current = false;
+    runSave(new FormData(formRef.current));
+  }
+
+  function scheduleAutosave() {
+    if (gpaInvalidRef.current) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      if (gpaInvalidRef.current || !formRef.current) return;
+      dirtyRef.current = false;
+      runSave(new FormData(formRef.current));
+    }, AUTOSAVE_DELAY);
+  }
+
+  /** For the controlled ListFields, whose add/remove clicks fire no form event. */
+  function markDirtyAndSchedule() {
+    dirtyRef.current = true;
+    scheduleAutosave();
+  }
+
+  // focusout bubbles, so this catches every field in the form.
+  function handleFormBlur() {
+    if (dirtyRef.current) scheduleAutosave();
+  }
+
+  // Text fields save on blur; toggles and dropdowns commit on change.
+  function handleFormChange(e: React.FormEvent<HTMLFormElement>) {
+    dirtyRef.current = true;
+    const el = e.target as HTMLElement;
+    if (
+      el instanceof HTMLSelectElement ||
+      (el instanceof HTMLInputElement && el.type === "checkbox")
+    ) {
+      scheduleAutosave();
+    }
+  }
+
+  function handleGpaBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const raw = e.target.value.trim();
+    if (raw === "") {
+      e.target.value = "";
+      gpaInvalidRef.current = false;
+      setGpaError(null);
+      return;
+    }
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0 && n <= 4) {
+      // Mirror the server rule so the tidied value shows up right away.
+      e.target.value = n.toFixed(2);
+      gpaInvalidRef.current = false;
+      setGpaError(null);
+    } else {
+      gpaInvalidRef.current = true;
+      setGpaError(GPA_ERROR);
+    }
   }
 
   return (
@@ -232,7 +432,16 @@ export function AccountView({
         description="This is you, on paper. Your plan, your materials, and the future AI features all pull from here — fill in what you've got, come back for the rest."
       />
 
-      <form action={submit} className="space-y-4">
+      <form
+        ref={formRef}
+        onSubmit={(e) => {
+          e.preventDefault();
+          saveNow();
+        }}
+        onBlur={handleFormBlur}
+        onChange={handleFormChange}
+        className="space-y-4"
+      >
         {/* ---------------------------- Basics ---------------------------- */}
         <Card className="p-5 sm:p-6">
           <SectionHeader
@@ -240,6 +449,64 @@ export function AccountView({
             title="Basics"
             sub="The quick facts — name, school, timeline. Nothing scary."
           />
+          <div className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl border border-brand-100 bg-brand-50/50 p-4">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-200 text-2xl font-semibold text-brand-800">
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt="Your profile"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                (profile?.full_name || email || "?").charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-brand-900">Profile photo</p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Shown in the bottom-left account icon throughout the dashboard.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    uploadAvatar(event.target.files?.[0] ?? null);
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={avatarPending}
+                  onClick={() => avatarInputRef.current?.click()}
+                >
+                  {avatarPending ? <Spinner /> : <ImagePlus className="h-3.5 w-3.5" />}
+                  {avatarUrl ? "Replace photo" : "Upload photo"}
+                </Button>
+                {avatarUrl && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={avatarPending}
+                    onClick={removeAvatar}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                  </Button>
+                )}
+              </div>
+              {avatarError && (
+                <p className="mt-2 text-xs font-medium text-rose-600">
+                  {avatarError}
+                </p>
+              )}
+            </div>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Full name">
               <Input
@@ -291,18 +558,33 @@ export function AccountView({
                 ))}
               </Select>
             </Field>
-            <Field label="GPA" hint="We'll tidy it to two decimals for you.">
-              <div className="flex items-center gap-2">
-                <Input
-                  name="gpa"
-                  placeholder="3.87"
-                  inputMode="decimal"
-                  defaultValue={gpaDefault}
-                  className="flex-1"
-                />
-                <span className="shrink-0 text-sm font-medium text-zinc-400">
-                  / 4.00
-                </span>
+            <Field
+              label="GPA"
+              hint={gpaError ? undefined : "We'll tidy it to two decimals for you."}
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    name="gpa"
+                    placeholder="3.87"
+                    inputMode="decimal"
+                    defaultValue={gpaDefault}
+                    onBlur={handleGpaBlur}
+                    className={cn(
+                      "flex-1",
+                      gpaError &&
+                        "border-rose-300! focus:border-rose-300! focus:ring-rose-200!"
+                    )}
+                  />
+                  <span className="shrink-0 text-sm font-medium text-zinc-400">
+                    / 4.00
+                  </span>
+                </div>
+                {gpaError && (
+                  <span className="mt-1 block text-xs text-rose-600">
+                    {gpaError}
+                  </span>
+                )}
               </div>
             </Field>
             <Field label="Location">
@@ -334,7 +616,10 @@ export function AccountView({
               label="Majors"
               name="majors"
               values={majors}
-              onChange={setMajors}
+              onChange={(next) => {
+                setMajors(next);
+                markDirtyAndSchedule();
+              }}
               placeholder="e.g. Economics"
               addLabel="add another major"
             />
@@ -342,7 +627,10 @@ export function AccountView({
               label="Minors"
               name="minors"
               values={minors}
-              onChange={setMinors}
+              onChange={(next) => {
+                setMinors(next);
+                markDirtyAndSchedule();
+              }}
               placeholder="e.g. Computer Science"
               addLabel="add a minor"
             />
@@ -350,7 +638,10 @@ export function AccountView({
               label="Certificates"
               name="certificates"
               values={certificates}
-              onChange={setCertificates}
+              onChange={(next) => {
+                setCertificates(next);
+                markDirtyAndSchedule();
+              }}
               placeholder="e.g. Financial Economics"
               addLabel="add a certificate"
             />
@@ -417,7 +708,7 @@ export function AccountView({
           <SectionHeader
             icon={Heart}
             title="Personal attributes"
-            sub="Please don't make these all corporate. Pickup soccer, sourdough, chess hustling — the random human stuff is what interviewers actually remember and connect with. It's what makes you you."
+            sub="Please don't make these all corporate. Pickup soccer, lactose intolerance, chess hustling — the random human stuff is what interviewers actually remember and connect with. It's what makes you you."
           />
           <div className="space-y-4">
             <Field
@@ -427,12 +718,15 @@ export function AccountView({
               <Textarea
                 name="personal_interests"
                 placeholder={
-                  "Pickup soccer\nSourdough baking\nDie-hard Bears fan"
+                  "Pickup soccer\nLactose intolerance\nDie-hard Bears fan"
                 }
                 defaultValue={profile?.personal_interests ?? ""}
               />
             </Field>
-            <Field label="Fun facts" hint="One per line — the weirder the better.">
+            <Field
+              label="Fun facts"
+              hint="One per line — make it random, make it special."
+            >
               <Textarea
                 name="fun_facts"
                 placeholder={
@@ -444,20 +738,30 @@ export function AccountView({
           </div>
         </Card>
 
-        {error && (
-          <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600">
-            {error}
-          </p>
-        )}
-
-        <div className="flex items-center justify-end gap-3">
-          {saved && (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {status === "idle" && (
+            <span className="text-xs text-zinc-400">Autosaves as you go</span>
+          )}
+          {status === "saving" && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-400">
+              <Spinner className="h-3.5 w-3.5" /> Saving…
+            </span>
+          )}
+          {status === "saved" && (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
               <CheckCircle2 className="h-3.5 w-3.5" /> Saved
             </span>
           )}
-          <Button type="submit" disabled={pending}>
-            {pending ? <Spinner /> : "Save profile"}
+          {status === "error" && saveError && (
+            <span className="text-xs font-medium text-rose-600">
+              Couldn&apos;t save — {saveError}
+            </span>
+          )}
+          <Button
+            type="submit"
+            disabled={status === "saving" || gpaError !== null}
+          >
+            {status === "saving" ? <Spinner /> : "Save profile"}
           </Button>
         </div>
       </form>
@@ -468,15 +772,24 @@ export function AccountView({
           <SectionHeader
             icon={Crown}
             title="Your plan"
-            sub="No paywalls around here (yet)."
+            sub="Where your subscription stands."
           />
           <div className="space-y-3">
-            <Badge className={tier.color}>{tier.label}</Badge>
-            <p className="text-sm text-zinc-500">
-              {tier.value === "free"
-                ? "Free — everything's included right now. Paid tiers come later; early birds will be treated kindly."
-                : `You're on ${tier.label} — everything's unlocked. Thanks for backing us early.`}
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge className={tierInfo.badgeClass}>{tierInfo.label}</Badge>
+              {profile?.is_admin && (
+                <Badge className="bg-amber-100 text-amber-700">
+                  <ShieldCheck className="h-3 w-3" /> Admin
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-zinc-500">{tierInfo.tagline}</p>
+            <a
+              href="#plans"
+              className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 transition-colors hover:text-brand-700"
+            >
+              See plans <ArrowDown className="h-3.5 w-3.5" />
+            </a>
           </div>
         </Card>
 
@@ -523,27 +836,42 @@ export function AccountView({
           </div>
         </Card>
 
-        {/* ------------------------- AI placeholder ------------------------ */}
-        <Card className="border-dashed bg-brand-50 p-5 sm:p-6">
+        {/* Existing outreach drafts already match profile + contact context. */}
+        <Card className="bg-brand-50 p-5 sm:p-6">
           <div className="flex h-full flex-col items-start gap-3">
             <div className="flex items-center gap-2.5">
               <div className="rounded-xl bg-brand-100 p-2 text-brand-600">
                 <Sparkles className="h-5 w-5" />
               </div>
               <h2 className="font-semibold text-brand-900">
-                AI icebreaker matching — coming soon
+                AI common-ground matching
               </h2>
             </div>
             <p className="text-sm text-zinc-500">
-              We&apos;ll cross-reference your interests and fun facts with each
-              contact&apos;s to suggest openers that actually land.
+              Outreach drafts already cross-reference your interests, fun
+              facts, and each contact&apos;s details to suggest openers that land.
             </p>
-            <Button variant="secondary" size="sm" disabled className="mt-auto">
-              <Sparkles className="h-3.5 w-3.5" /> Coming soon
-            </Button>
+            <Link
+              href="/dashboard/contacts"
+              className="mt-auto inline-flex items-center gap-1.5 rounded-xl border border-brand-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Draft from a contact
+            </Link>
           </div>
         </Card>
       </div>
+
+      <PlansSection currentTier={currentTier} isAdmin={!!profile?.is_admin} />
+
+      {/* Owner-only: which model powers every AI feature. The server action
+          and the app_settings RLS policy both re-check is_admin. */}
+      {profile?.is_admin && (
+        <AiEngineCard
+          currentModel={aiModel}
+          hasAnthropicKey={hasAnthropicKey}
+          hasOpenAIKey={hasOpenAIKey}
+        />
+      )}
     </div>
   );
 }

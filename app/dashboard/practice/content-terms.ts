@@ -279,6 +279,223 @@ export const KEY_TERMS: KeyTerm[] = [
       trap: "Using a growth rate above the economy's long-run growth — the company would eventually BE the economy. Interviewers check whether your g makes sense.",
     },
   },
+
+  /* ---- The three statements & their line items ---- */
+  {
+    term: "Income Statement",
+    plain:
+      "The report that shows whether the company made money over a period — revenue at the top, profit at the bottom.",
+    deeper: {
+      detail:
+        "Revenue − COGS = gross profit; subtract operating expenses like SG&A and R&D for operating income (EBIT); then interest and taxes take their cut down to net income. It's built on accrual accounting, so revenue is booked when earned, not when the cash arrives.",
+      why: "Every profitability number interviewers ask about — gross margin, EBIT, net income, EPS — lives here, and it's where the classic three-statement walk starts.",
+      trap: "\"Is net income cash?\" No — accrual timing and non-cash charges like D&A drive a wedge between profit and cash. That gap is exactly what the cash flow statement exists to bridge.",
+    },
+  },
+  {
+    term: "Balance Sheet",
+    plain:
+      "A snapshot of what the company owns, what it owes, and what's left for shareholders — frozen at a single date.",
+    deeper: {
+      detail:
+        "Assets (cash, receivables, inventory, PP&E) on one side; liabilities (payables, debt) plus shareholders' equity on the other. Assets = Liabilities + Equity, always — and unlike the other two statements, it's a point-in-time photo, not a period.",
+      why: "Every three-statement question ends here: whatever the transaction, the balance sheet has to balance, which is how interviewers check you actually understand the linkages.",
+      trap: "Saying a balance sheet covers \"the year.\" It doesn't — it's one date. Mixing up a snapshot (balance sheet) with a flow (income statement) reads as a fundamentals gap.",
+    },
+  },
+  {
+    term: "Cash Flow Statement",
+    plain:
+      "The statement that tracks actual cash moving in and out — the bridge from accounting profit to money in the bank.",
+    deeper: {
+      detail:
+        "Three sections: operations (net income plus non-cash add-backs like D&A, adjusted for working capital swings), investing (capex, acquisitions), and financing (debt raised or repaid, dividends, buybacks). The bottom line — the net change in cash — becomes the cash balance on the next balance sheet.",
+      why: "Cash is the hardest number to dress up, and companies fail by running out of cash, not by reporting accounting losses — which is why \"pick one statement\" is answered with this one.",
+      trap: "Forgetting the sign flips: working capital going UP means cash going DOWN. The add-back logic in the operations section is where most three-statement walks fall apart.",
+    },
+  },
+  {
+    term: "Net Income",
+    plain:
+      "The famous \"bottom line\" — profit left for shareholders after every expense, including interest and taxes.",
+    deeper: {
+      detail:
+        "Revenue minus everything: COGS, operating expenses, D&A, interest, and taxes. It's also the thread stitching the statements together — it tops the cash flow statement and flows into retained earnings on the balance sheet.",
+      why: "It's the E in P/E and EPS, so equity investors — and accretion/dilution math — live and die by it.",
+      trap: "Pairing it with enterprise value. Net income belongs to shareholders only, so it goes with equity value (P/E) — EV ÷ net income is the classic mismatch red flag.",
+    },
+  },
+  {
+    term: "D&A",
+    plain:
+      "Depreciation and amortization — spreading the cost of big purchases over the years they're used, on paper rather than in cash.",
+    deeper: {
+      detail:
+        "Buy a $50M machine and the income statement charges, say, $5M a year for ten years instead of $50M at once (depreciation; amortization is the same idea for intangibles). No cash leaves when the charge hits — the cash left when the asset was bought.",
+      why: "It's the classic non-cash charge, so it gets added back on the cash flow statement — and it's the entire difference between EBIT and EBITDA.",
+      trap: "The \"depreciation up $10\" question: with taxes, net income falls $7 but cash goes UP $3. Forget that D&A is non-cash and the whole walk collapses.",
+    },
+  },
+  {
+    term: "PP&E",
+    plain:
+      "Property, plant & equipment — the long-lived physical stuff a company owns: buildings, machines, vehicles, servers.",
+    deeper: {
+      detail:
+        "Sits on the balance sheet at cost minus accumulated depreciation (\"net PP&E\"). Capex adds to it each year; depreciation wears it back down.",
+      why: "It's the balance-sheet home of capex and the source of depreciation, so it appears in nearly every three-statement walk.",
+      trap: "In the \"depreciation up $10\" question, forgetting that net PP&E falls $10 on the asset side is what stops the balance sheet from balancing.",
+    },
+  },
+  {
+    term: "Gross Margin",
+    plain:
+      "The percentage of each sales dollar left after paying the direct cost of the product itself.",
+    deeper: {
+      detail:
+        "(Revenue − COGS) ÷ revenue. A 40% gross margin means each $1 of sales leaves $0.40 to cover everything else — overhead, marketing, R&D — before any profit.",
+      why: "It's the purest read on pricing power and product economics, and margin bridges (\"why did gross margin fall 250bps?\") are consulting-case bread and butter.",
+      trap: "Confusing gross margin (after COGS only) with operating or net margin (after much more). Saying which margin you mean, unprompted, is an easy credibility win.",
+    },
+  },
+  {
+    term: "COGS",
+    plain:
+      "Cost of goods sold — what it directly costs to make or deliver the thing you're selling.",
+    deeper: {
+      detail:
+        "Materials, factory labor, freight — costs that scale with each unit sold. It's the first subtraction on the income statement, and it excludes overhead like HQ rent or the sales team (that's SG&A).",
+      why: "Revenue − COGS = gross profit, so where a cost gets classified decides which margin it hits — and which lever a case asks you to pull.",
+      trap: "Sorting costs wrong in a case: a delivery company's drivers are COGS, but its accountants are SG&A. Fixed-vs-variable and COGS-vs-SG&A are different cuts — don't blur them.",
+    },
+  },
+  {
+    term: "SG&A",
+    plain:
+      "Selling, general & administrative costs — the overhead of running the company: salaries, rent, marketing, back office.",
+    deeper: {
+      detail:
+        "Everything operating that isn't directly making the product: sales teams, executives, HR, legal, office space, advertising. It sits below gross profit on the income statement and mostly doesn't scale one-for-one with volume.",
+      why: "It's the first place everyone hunts for cost savings — in consulting cases and merger synergies (\"combine the back offices\") alike.",
+      trap: "Calling SG&A entirely fixed. Chunks of it (commissions, marketing) flex with revenue — the split matters when a case asks what happens if volume drops 20%.",
+    },
+  },
+  {
+    term: "NOPAT",
+    plain:
+      "Net operating profit after tax — what the company would earn if it had no debt: operating profit with taxes taken out.",
+    deeper: {
+      detail:
+        "EBIT × (1 − tax rate). It taxes operating profit directly and ignores the interest deduction, giving a clean, capital-structure-free profit number.",
+      why: "It's the first line of the unlevered free cash flow build (NOPAT + D&A − capex − working capital change), so every DCF starts here.",
+      trap: "Using net income instead of NOPAT in unlevered FCF — net income already reflects interest, so you'd be mixing levered and unlevered math.",
+    },
+  },
+
+  /* ---- Valuation & deals ---- */
+  {
+    term: "Precedent Transactions",
+    plain:
+      "Valuing a company by looking at prices actually paid in past takeovers of similar companies.",
+    deeper: {
+      detail:
+        "Collect recent M&A deals in the sector, spread the multiples paid (usually EV/EBITDA), and apply that range to your target. Because buyers pay for control and synergies, these multiples run above trading comps.",
+      why: "One of the three core valuation methods — and the go-to answer for \"which method gives the highest value?\"",
+      trap: "Treating old deals as current truth. A 2021 multiple tells you about the 2021 market, and deal-specific quirks (auctions, synergies) can make any single precedent misleading.",
+    },
+  },
+  {
+    term: "Cost of Equity",
+    plain:
+      "The return shareholders demand for taking the risk of owning the stock — the expensive half of WACC.",
+    deeper: {
+      detail:
+        "Estimated with CAPM: risk-free rate + beta × equity risk premium. Beta measures how much the stock swings with the market — swingier businesses get a higher beta, and therefore a pricier cost of equity.",
+      why: "It's usually the biggest input to WACC, and it's the right discount rate for equity-only (levered) cash flows.",
+      trap: "\"Why is cost of equity higher than cost of debt?\" Shareholders get paid last and are promised nothing — more risk, more required return. Tax-deductible interest widens the gap further.",
+    },
+  },
+  {
+    term: "Cost of Debt",
+    plain:
+      "The interest rate a company would pay to borrow money today.",
+    deeper: {
+      detail:
+        "Take the yield on the company's existing debt (or what lenders would charge now), then multiply by (1 − tax rate) — interest is tax-deductible, so the government effectively picks up part of the bill.",
+      why: "It's the cheaper half of WACC, and the tax shield on interest is a big part of why leverage can juice returns.",
+      trap: "Using the coupon on old debt instead of today's yield. Cost of debt is what borrowing costs NOW, not what it cost when the bonds were issued.",
+    },
+  },
+  {
+    term: "Control Premium",
+    plain:
+      "The extra amount a buyer pays over the market price to own the whole company and call the shots.",
+    deeper: {
+      detail:
+        "Buyers typically pay 20–40% over the pre-announcement share price, justified by synergies and the value of controlling decisions — strategy, management, dividends. Precedent transactions bake this premium in; trading comps don't.",
+      why: "It's the standard explanation for why precedent transactions run above trading comps — and it's the bar synergies have to clear to justify a deal.",
+      trap: "\"Why pay above the market price?\" Because the market price buys one passive share, not the steering wheel. Miss that logic and the comps-vs-precedents answer unravels.",
+    },
+  },
+  {
+    term: "Quality of Earnings",
+    plain:
+      "How trustworthy and repeatable a company's reported profits are — recurring earnings versus one-time or accounting-flattered ones.",
+    deeper: {
+      detail:
+        "Diligence teams strip out one-time items, check how revenue is recognized, and flag accounting choices (like capitalizing costs instead of expensing them) that dress up EBITDA. The formal version is a QofE report from an accounting firm.",
+      why: "A dollar of recurring earnings deserves a higher multiple than a dollar of one-offs — and QofE findings routinely reprice or kill deals.",
+      trap: "Taking \"adjusted EBITDA\" at face value. Every add-back is a claim, and interviewers like candidates who instinctively ask what's hiding in the adjustments.",
+    },
+  },
+  {
+    term: "Market Technicals",
+    plain:
+      "Price moves driven by trading dynamics — who's buying and selling and why — rather than the business itself.",
+    deeper: {
+      detail:
+        "Takeover speculation, index inclusion (funds forced to buy), analyst coverage changes, short squeezes, big holders entering or exiting. None of them change the company's cash flows.",
+      why: "They explain why a stock can move when fundamentals didn't — a useful bucket in any \"what drives a share price?\" answer.",
+      trap: "Attributing every move to fundamentals. Sorting fundamental drivers from technical ones shows a maturity most candidates skip.",
+    },
+  },
+
+  /* ---- LBO return levers ---- */
+  {
+    term: "Debt Paydown",
+    plain:
+      "Using the company's own cash flow to shrink its debt — one of the three ways an LBO makes money.",
+    deeper: {
+      detail:
+        "Every dollar of debt repaid shifts a dollar of value from the lenders' claim to the sponsor's equity, even if the business never gets more valuable. Buy with heavy debt, pay half of it down, and equity grows with zero growth.",
+      why: "It's the most controllable of the three LBO return levers (paydown, EBITDA growth, multiple expansion) — which is why stable cash flows top the good-target checklist.",
+      trap: "\"Can an LBO work with no growth?\" Yes — debt paydown alone can clear the return bar. Forget that lever and the whole LBO model looks like a growth bet.",
+    },
+  },
+  {
+    term: "Multiple Expansion",
+    plain:
+      "Selling the company at a higher multiple than you paid — the market simply values each dollar of earnings more at exit.",
+    deeper: {
+      detail:
+        "Buy at 8x EBITDA and sell at 10x, and equity value jumps even with flat EBITDA. It can come from better market sentiment, a bigger and higher-quality business at exit, or plain luck on timing.",
+      why: "It's the third LBO return lever — and the one sponsors are least willing to bet on, since it's mostly out of their control.",
+      trap: "Baking multiple expansion into base-case returns. The conservative assumption is exit multiple = entry multiple; anything more should be justified, not assumed.",
+    },
+  },
+
+  /* ---- Consulting ---- */
+  {
+    term: "Candidate-led vs Interviewer-led",
+    plain:
+      "The two case interview formats: either you drive the problem-solving roadmap (candidate-led) or the interviewer walks you through set questions (interviewer-led).",
+    deeper: {
+      detail:
+        "Bain and BCG mostly run candidate-led cases — you structure the problem, pick the next branch, and push toward a recommendation. McKinsey runs interviewer-led — they steer between questions and you go deep on each one.",
+      why: "The format changes how you prep: candidate-led rewards owning the roadmap and driving forward; interviewer-led rewards crisp, complete answers to each prompt.",
+      trap: "Waiting for direction in a candidate-led case. If it's your case to drive, silence isn't the interviewer being unhelpful — it's the test.",
+    },
+  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -298,7 +515,15 @@ export const TERM_ALIASES: Record<string, string[]> = {
   LBO: ["LBO", "LBOs", "leveraged buyout"],
   "Accretion / Dilution": ["accretion/dilution", "accretive", "dilutive"],
   "Multiples (EV/EBITDA, P/E)": ["EV/EBITDA", "P/E", "multiples"],
-  "Working Capital": ["working capital", "NWC"],
+  "Working Capital": [
+    "changes in working capital",
+    "change in working capital",
+    "working capital changes",
+    "net working capital",
+    "working capital",
+    "working-capital",
+    "NWC",
+  ],
   CapEx: ["capex", "capital expenditures", "capital expenditure"],
   "Free Cash Flow": [
     "unlevered free cash flows",
@@ -319,5 +544,40 @@ export const TERM_ALIASES: Record<string, string[]> = {
   "Bulge Bracket": ["bulge bracket", "bulge-bracket"],
   MBB: ["MBB"],
   "Sell-Side vs Buy-Side": ["sell-side", "buy-side", "sell side", "buy side"],
-  "Terminal Value": ["terminal value"],
+  "Terminal Value": ["terminal value", "Gordon growth"],
+  "Income Statement": ["income statement", "income statements"],
+  "Balance Sheet": ["balance sheet", "balance sheets"],
+  "Cash Flow Statement": [
+    "cash flow statement",
+    "cash flow statements",
+    "net change in cash",
+  ],
+  "Net Income": ["net income"],
+  "D&A": [
+    "D&A",
+    "depreciation and amortization",
+    "depreciation & amortization",
+    "non-cash charges",
+    "non-cash charge",
+    "depreciation",
+    "amortization",
+  ],
+  "PP&E": ["PP&E", "property, plant and equipment"],
+  "Gross Margin": ["gross margin", "gross margins", "gross profit"],
+  COGS: ["COGS", "cost of goods sold"],
+  "SG&A": ["SG&A"],
+  NOPAT: ["NOPAT"],
+  "Precedent Transactions": [
+    "precedent transactions",
+    "precedent transaction",
+    "precedents",
+  ],
+  "Cost of Equity": ["cost of equity", "CAPM"],
+  "Cost of Debt": ["cost of debt"],
+  "Control Premium": ["control premium", "control premiums"],
+  "Quality of Earnings": ["quality of earnings", "QofE"],
+  "Market Technicals": ["market technicals"],
+  "Debt Paydown": ["debt paydown"],
+  "Multiple Expansion": ["multiple expansion"],
+  "Candidate-led vs Interviewer-led": ["candidate-led", "interviewer-led"],
 };

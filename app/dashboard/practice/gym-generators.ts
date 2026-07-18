@@ -24,6 +24,8 @@ export type GymQuestion = {
   answerText: string;
   /** Small hint shown under the input ("answer in %, whole number"). */
   note?: string;
+  /** Compact worked solution for the See-answer review (word/tables only). */
+  solution?: string;
   /** Tables mode only: the exhibit to render above the input. */
   table?: TableData;
 };
@@ -277,6 +279,7 @@ export function makeWordQuestion(
       answer,
       answerText: money(answer),
       note: MONEY_NOTE,
+      solution: `2024 revenue ${money(base)} × (1 + ${g}%) = ${money(answer)}`,
     };
   }
 
@@ -290,6 +293,7 @@ export function makeWordQuestion(
       answer,
       answerText: money(answer),
       note: MONEY_NOTE,
+      solution: `${money(base)} × ${p}% = ${money(base)} ÷ 100 × ${p} = ${money(answer)}`,
     };
   }
 
@@ -298,12 +302,14 @@ export function makeWordQuestion(
     const m = hard ? randInt(11, 69) : pick([20, 25, 30, 40, 50, 75]);
     const revenue = hard ? randInt(120, 980) * 10_000 : randInt(2, 9) * 100_000;
     const costs = (revenue / 100) * (100 - m);
+    const profit = revenue - costs;
     return {
       prompt: `${company}: revenue ${money(revenue)}, costs ${money(costs)} — profit margin in %?`,
       kind: "numeric",
       answer: m,
       answerText: `${m}%`,
       note: "answer in %, whole number",
+      solution: `Profit = ${money(revenue)} − ${money(costs)} = ${money(profit)}; margin = ${money(profit)} ÷ ${money(revenue)} = ${m}%`,
     };
   }
 
@@ -318,6 +324,7 @@ export function makeWordQuestion(
       answer: units,
       answerText: `${fmt(units)} units`,
       note: "answer in units, whole number",
+      solution: `Fixed costs ÷ profit per unit = ${money(fixed)} ÷ ${money(perUnit)} = ${fmt(units)} units`,
     };
   }
 
@@ -326,13 +333,15 @@ export function makeWordQuestion(
     const people = hard ? randInt(2, 90) * 500_000 : pick([1, 2, 4, 5, 8, 10]) * 1_000_000;
     const adopt = hard ? pick([4, 6, 8, 12, 15, 30, 35]) : pick([5, 10, 20, 25, 50]);
     const spend = hard ? pick([12, 15, 18, 24, 36, 45, 60]) : pick([5, 10, 20, 30, 50, 100]);
-    const answer = (people / 100) * adopt * spend;
+    const adopters = (people / 100) * adopt;
+    const answer = adopters * spend;
     return {
       prompt: `${fmt(people)} people × ${adopt}% adoption × $${spend}/year — market size in $?`,
       kind: "numeric",
       answer,
       answerText: money(answer),
       note: MONEY_NOTE,
+      solution: `${fmt(people)} × ${adopt}% = ${fmt(adopters)} adopters; ${fmt(adopters)} × $${spend} = ${money(answer)}`,
     };
   }
 
@@ -346,6 +355,7 @@ export function makeWordQuestion(
     answer: per,
     answerText: `$${per}`,
     note: "answer in $ per unit, whole number",
+    solution: `${money(total)} ÷ ${fmt(units)} units = $${per} per unit`,
   };
 }
 
@@ -441,6 +451,7 @@ export function makeTableQuestion(
       note: hard
         ? "answer in %, whole number (negative if it shrank)"
         : "answer in %, whole number",
+      solution: `(${fmt(seg.y24)} − ${fmt(seg.y23)}) ÷ ${fmt(seg.y23)} = ${seg.g}%`,
       table,
     };
   }
@@ -454,6 +465,7 @@ export function makeTableQuestion(
       answer,
       answerText: money(answer),
       note: MONEY_NOTE,
+      solution: `${fmt(segs[0].y24)} + ${fmt(segs[1].y24)} + ${fmt(segs[2].y24)} = ${money(answer)}`,
       table,
     };
   }
@@ -468,6 +480,7 @@ export function makeTableQuestion(
       kind: "text",
       answer,
       answerText: answer,
+      solution: `A grew ${ex.segs[0].g}%, C grew ${ex.segs[2].g}% — ${answer} is bigger`,
       table: ex.table,
     };
   }
@@ -482,11 +495,13 @@ export function makeTableQuestion(
       answer,
       answerText: money(answer),
       note: MONEY_NOTE,
+      solution: `${fmt(seg.units)} units × $${seg.price} = ${money(answer)}`,
       table,
     };
   }
 
   const inc = genIncome(hard);
+  const gpLine = `Gross profit = revenue − COGS = ${money(inc.revenue)} − ${money(inc.cogs)} = ${money(inc.gp)}`;
 
   if (family === "income-grossprofit") {
     return {
@@ -495,6 +510,7 @@ export function makeTableQuestion(
       answer: inc.gp,
       answerText: money(inc.gp),
       note: MONEY_NOTE,
+      solution: gpLine,
       table: inc.table,
     };
   }
@@ -506,6 +522,7 @@ export function makeTableQuestion(
       answer,
       answerText: money(answer),
       note: MONEY_NOTE,
+      solution: `${gpLine}; EBIT = GP − SG&A − R&D − D&A = ${money(inc.gp)} − ${money(inc.sga)} − ${money(inc.rd)} − ${money(inc.da)} = ${money(answer)}`,
       table: inc.table,
     };
   }
@@ -517,6 +534,7 @@ export function makeTableQuestion(
       answer,
       answerText: money(answer),
       note: MONEY_NOTE,
+      solution: `${gpLine}; EBITDA = GP − SG&A − R&D = ${money(inc.gp)} − ${money(inc.sga)} − ${money(inc.rd)} = ${money(answer)}`,
       table: inc.table,
     };
   }
@@ -527,6 +545,7 @@ export function makeTableQuestion(
     answer: inc.gm,
     answerText: `${inc.gm}%`,
     note: "answer in %, whole number",
+    solution: `${gpLine}; margin = ${money(inc.gp)} ÷ ${money(inc.revenue)} = ${inc.gm}%`,
     table: inc.table,
   };
 }

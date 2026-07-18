@@ -4,13 +4,16 @@
 // word problems, table reading) plus honest links to external trainers.
 // Personal bests persist per mode+difficulty in localStorage.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowRight,
   Check,
   Dumbbell,
   ExternalLink,
+  Eye,
   Flame,
   PartyPopper,
+  Pause,
   Play,
   RotateCcw,
   Settings2,
@@ -75,20 +78,16 @@ export function readBests(): Bests {
 /* ------------------------------------------------------------------ */
 
 const CONFETTI_COLORS = ["#8451ec", "#b79bfb", "#d3c2fe", "#f59e0b", "#34d399"];
+const CONFETTI_PIECES = Array.from({ length: 18 }, (_, i) => ({
+  left: (i * 37 + 11) % 100,
+  delay: ((i * 17) % 40) / 100,
+  duration: 1.3 + ((i * 29) % 90) / 100,
+  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+  size: 6 + ((i * 23) % 60) / 10,
+  drift: -50 + ((i * 41) % 100),
+}));
 
 function Confetti() {
-  const pieces = useMemo(
-    () =>
-      Array.from({ length: 18 }, (_, i) => ({
-        left: Math.random() * 100,
-        delay: Math.random() * 0.4,
-        duration: 1.3 + Math.random() * 0.9,
-        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-        size: 6 + Math.random() * 6,
-        drift: -50 + Math.random() * 100,
-      })),
-    []
-  );
   return (
     <div
       aria-hidden
@@ -98,7 +97,7 @@ function Confetti() {
         0% { transform: translate3d(0, -12px, 0) rotate(0deg); opacity: 1; }
         100% { transform: translate3d(var(--drift), 340px, 0) rotate(540deg); opacity: 0; }
       }`}</style>
-      {pieces.map((p, i) => (
+      {CONFETTI_PIECES.map((p, i) => (
         <span
           key={i}
           className="absolute top-0 rounded-[2px]"
@@ -186,12 +185,32 @@ function MathSprint() {
     ok: boolean;
     text: string;
   } | null>(null);
-  // Word/Tables only: brief "here's the right answer" flash after a miss.
-  const [feedback, setFeedback] = useState<{ text: string } | null>(null);
+  // Word/Tables only: answer reveal after a miss. Non-sticky = the brief
+  // auto-advancing flash; sticky = a See-answer review that waits for the user.
+  const [feedback, setFeedback] = useState<{
+    text: string;
+    solution?: string;
+    sticky: boolean;
+  } | null>(null);
+  // True while the round clock is stopped for a review (flash or sticky).
+  const [paused, setPaused] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const endAtRef = useRef(0);
+  // Remaining ms captured when the clock pauses; null while the clock is live.
+  const pausedLeftRef = useRef<number | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const endRound = useCallback(() => {
+    if (feedbackTimerRef.current) {
+      clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = null;
+    }
+    setPaused(false);
+    setFeedback(null);
+    pausedLeftRef.current = null;
+    setPhase("done");
+  }, []);
 
   const modeMeta = MODES.find((m) => m.value === mode) ?? MODES[0];
   const roundSeconds = modeMeta.seconds;
@@ -199,39 +218,55 @@ function MathSprint() {
 
   // localStorage is browser-only — read after mount.
   useEffect(() => {
-    setBests(readBests());
+    const id = setTimeout(() => setBests(readBests()), 0);
+    return () => clearTimeout(id);
   }, []);
 
-  // Countdown while running.
+  // Countdown while running (and not paused for a review).
   useEffect(() => {
-    if (phase !== "running") return;
+    if (phase !== "running" || paused) return;
     const id = setInterval(() => {
       const left = Math.max(0, (endAtRef.current - Date.now()) / 1000);
       setTimeLeft(left);
-      if (left <= 0) setPhase("done");
+      if (left <= 0) endRound();
     }, 100);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, paused, endRound]);
 
   // Escape ends the round early (same as the End round button).
   useEffect(() => {
     if (phase !== "running") return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPhase("done");
+      if (e.key === "Escape") endRound();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase]);
+  }, [phase, endRound]);
 
-  // Cancel any pending wrong-answer flash when the round stops / unmounts.
-  // (Stale `feedback` state is harmless — it's only rendered while running,
-  // and start() resets it before every round.)
+  // Enter advances out of a sticky See-answer review. (The input is readOnly
+  // during a review, so the form won't also submit.) No deps array on purpose:
+  // resubscribing each render keeps advanceFromReview's closure fresh.
+  useEffect(() => {
+    if (phase !== "running" || !feedback?.sticky) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        advanceFromReview();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  // Cancel any pending wrong-answer flash when the round stops. endRound()
+  // resets pause state for explicit/clock endings; start() does it for a new run.
   useEffect(() => {
     if (phase === "running") return;
     if (feedbackTimerRef.current) {
       clearTimeout(feedbackTimerRef.current);
       feedbackTimerRef.current = null;
     }
+    pausedLeftRef.current = null;
   }, [phase]);
   useEffect(
     () => () => {
@@ -243,18 +278,21 @@ function MathSprint() {
   // Save personal best (per mode+difficulty) when a round ends.
   useEffect(() => {
     if (phase !== "done") return;
-    const key = bestKeyFor(mode, difficulty);
-    const prev = readBests();
-    if (score > (prev[key] ?? 0)) {
-      const next = { ...prev, [key]: score };
-      try {
-        localStorage.setItem(BEST_KEY, JSON.stringify(next));
-      } catch {
-        // storage unavailable — best just won't persist
+    const id = setTimeout(() => {
+      const key = bestKeyFor(mode, difficulty);
+      const prev = readBests();
+      if (score > (prev[key] ?? 0)) {
+        const next = { ...prev, [key]: score };
+        try {
+          localStorage.setItem(BEST_KEY, JSON.stringify(next));
+        } catch {
+          // storage unavailable — best just won't persist
+        }
+        setBests(next);
+        setNewBest((prev[key] ?? 0) > 0);
       }
-      setBests(next);
-      setNewBest((prev[key] ?? 0) > 0); // celebrate beating a real previous best
-    }
+    }, 0);
+    return () => clearTimeout(id);
   }, [phase, score, mode, difficulty]);
 
   function start() {
@@ -265,6 +303,8 @@ function MathSprint() {
     setNewBest(false);
     setLastResult(null);
     setFeedback(null);
+    setPaused(false);
+    pausedLeftRef.current = null;
     setQuestion(makeGymQuestion(mode, difficulty));
     setValue("");
     endAtRef.current = Date.now() + roundSeconds * 1000;
@@ -273,8 +313,44 @@ function MathSprint() {
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  function endRound() {
-    setPhase("done");
+  // The clock is an absolute deadline (endAtRef), so pausing must snapshot the
+  // remainder and push the deadline forward on resume — freezing the display
+  // alone would still let the deadline expire.
+  function pauseClock() {
+    pausedLeftRef.current = Math.max(0, endAtRef.current - Date.now());
+    setPaused(true);
+  }
+
+  function resumeClock() {
+    if (pausedLeftRef.current !== null) {
+      endAtRef.current = Date.now() + pausedLeftRef.current;
+      pausedLeftRef.current = null;
+    }
+    setPaused(false);
+  }
+
+  /** Close the open review (flash or sticky), restart the clock, deal the next question. */
+  function advanceFromReview() {
+    setFeedback(null);
+    resumeClock();
+    setQuestion(makeGymQuestion(mode, difficulty));
+    setValue("");
+    inputRef.current?.focus();
+  }
+
+  /** Give up on the current question: counts as attempted + wrong, opens a sticky review. */
+  function seeAnswer() {
+    if (phase !== "running" || !question || feedback) return;
+    setAnswered((a) => a + 1);
+    setStreak(0);
+    setLastResult(null);
+    setValue("");
+    pauseClock();
+    setFeedback({
+      text: question.answerText,
+      solution: question.solution,
+      sticky: true,
+    });
   }
 
   function filterInput(raw: string) {
@@ -308,16 +384,16 @@ function MathSprint() {
           : `${question.prompt} = ${question.answerText}`,
       });
     } else if (showsFlash) {
-      // Word problems & tables: pause ~1.2s and show the correct answer.
+      // Word problems & tables: stop the clock ~1.2s and show the correct
+      // answer (a miss shouldn't also cost reading time).
       setStreak(0);
       setLastResult(null);
       setValue("");
-      setFeedback({ text: question.answerText });
+      pauseClock();
+      setFeedback({ text: question.answerText, sticky: false });
       feedbackTimerRef.current = setTimeout(() => {
         feedbackTimerRef.current = null;
-        setFeedback(null);
-        setQuestion(makeGymQuestion(mode, difficulty));
-        inputRef.current?.focus();
+        advanceFromReview();
       }, 1200);
       return;
     } else {
@@ -423,12 +499,16 @@ function MathSprint() {
         </div>
       </div>
 
-      {/* Countdown bar */}
+      {/* Countdown bar (amber while the clock is paused for a review) */}
       <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-brand-100">
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-100 ease-linear",
-            running && timeLeft <= 10 ? "bg-rose-400" : "bg-brand-500"
+            paused
+              ? "bg-amber-400"
+              : running && timeLeft <= 10
+                ? "bg-rose-400"
+                : "bg-brand-500"
           )}
           style={{ width: `${(running ? timeFraction : 1) * 100}%` }}
         />
@@ -469,8 +549,14 @@ function MathSprint() {
               )}
               streak {streak}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-brand-600">
-              {Math.ceil(timeLeft)}s
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
+                paused ? "bg-amber-100 text-amber-700" : "bg-brand-50 text-brand-600"
+              )}
+            >
+              {paused && <Pause className="h-3.5 w-3.5" />}
+              {Math.ceil(timeLeft)}s{paused && " · paused for review"}
             </span>
           </div>
 
@@ -498,6 +584,12 @@ function MathSprint() {
               ref={inputRef}
               value={value}
               onChange={(e) => setValue(filterInput(e.target.value))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !feedback) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
               readOnly={!!feedback}
               inputMode={mode === "drills" ? "numeric" : undefined}
               autoComplete="off"
@@ -508,7 +600,19 @@ function MathSprint() {
                 feedback && "opacity-60"
               )}
             />
+            <button type="submit" className="sr-only">
+              Submit answer
+            </button>
           </form>
+
+          {sentenceMode && !feedback && (
+            <div className="mt-2 flex justify-center">
+              <Button type="button" variant="ghost" size="sm" onClick={seeAnswer}>
+                <Eye className="h-3.5 w-3.5" />
+                See answer
+              </Button>
+            </div>
+          )}
 
           {hint && (
             <p className="mt-1.5 text-center text-[11px] text-zinc-400">
@@ -517,10 +621,37 @@ function MathSprint() {
           )}
 
           {feedback ? (
-            <p className="animate-fade-up mt-3 flex min-h-5 items-center justify-center gap-1 text-center text-xs font-semibold text-rose-500">
-              <X className="h-3.5 w-3.5" />
-              The answer was {feedback.text}
-            </p>
+            feedback.sticky ? (
+              // bg-amber-50 (no opacity modifier) so the dark-theme remap applies
+              <div className="animate-fade-up mx-auto mt-4 max-w-md rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                <p className="flex items-center justify-center gap-1 text-xs font-semibold text-rose-500">
+                  <X className="h-3.5 w-3.5" />
+                  The answer was {feedback.text}
+                </p>
+                {feedback.solution && (
+                  <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                    {feedback.solution}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="mt-3"
+                  onClick={advanceFromReview}
+                >
+                  Next question
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+                <p className="mt-1.5 text-[11px] text-zinc-400">
+                  or press Enter — the clock is paused
+                </p>
+              </div>
+            ) : (
+              <p className="animate-fade-up mt-3 flex min-h-5 items-center justify-center gap-1 text-center text-xs font-semibold text-rose-500">
+                <X className="h-3.5 w-3.5" />
+                The answer was {feedback.text}
+              </p>
+            )
           ) : (
             <p
               className={cn(

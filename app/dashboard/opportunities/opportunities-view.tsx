@@ -9,27 +9,32 @@ import {
   ClipboardCheck,
   Compass,
   Bookmark,
+  Info,
   MapPin,
   Pencil,
   Plus,
+  RefreshCw,
   Sparkles,
   Telescope,
 } from "lucide-react";
 import type { Opportunity } from "@/lib/types";
 import { INDUSTRIES, companyLogoUrl, labelFor } from "@/lib/constants";
+import { callAI } from "@/lib/ai-client";
 import {
+  addScannedOpportunities,
   addToTracker,
   deleteOpportunity,
   setOpportunityStatus,
   upsertOpportunity,
   type ActionResult,
 } from "@/lib/actions/opportunities";
+import { TierGate } from "@/components/tier-gate";
+import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
 import { daysUntilLocal, useNow } from "@/components/use-today";
 import {
   Badge,
   Button,
   Card,
-  DeleteButton,
   EmptyState,
   Field,
   Input,
@@ -153,30 +158,385 @@ function DeadlineBadge({ deadline }: { deadline: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* AI placeholder + curated links                                      */
+/* AI scanner + curated links                                          */
 /* ------------------------------------------------------------------ */
 
-function ScannerPlaceholder() {
+/** One row from the "opportunities" AI scan (see app/api/ai/route.ts). */
+type ScannedItem = {
+  title: string;
+  company?: string | null;
+  industry?: string | null;
+  location?: string | null;
+  link?: string | null;
+  source?: string | null;
+  deadline?: string | null;
+  notes?: string | null;
+};
+
+const DEADLINE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function OpportunityScanner({
+  defaultIndustries,
+}: {
+  defaultIndustries: string[];
+}) {
+  const [industries, setIndustries] = useState<string[]>(() =>
+    defaultIndustries.filter((v) => INDUSTRIES.some((i) => i.value === v))
+  );
+  const [country, setCountry] = useState("United States");
+  const [stateRegion, setStateRegion] = useState("");
+  const [city, setCity] = useState("");
+  const [season, setSeason] = useState("");
+  const [year, setYear] = useState("");
+  const [keywords, setKeywords] = useState("");
+
+  const [scanning, startScan] = useTransition();
+  const [results, setResults] = useState<ScannedItem[] | null>(null);
+  const [setup, setSetup] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  const [addPending, startAdd] = useTransition();
+  const [addingKey, setAddingKey] = useState<number | "all" | null>(null);
+  const [addedRows, setAddedRows] = useState<Set<number>>(new Set());
+  const [addError, setAddError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function toggleIndustry(value: string) {
+    setIndustries((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  }
+
+  function scan() {
+    setScanError(null);
+    setSetup(null);
+    setNotice(null);
+    setAddError(null);
+    startScan(async () => {
+      const location = [
+        city.trim() && `City: ${city.trim()}`,
+        stateRegion.trim() && `State/region: ${stateRegion.trim()}`,
+        country.trim() && `Country: ${country.trim()}`,
+      ]
+        .filter(Boolean)
+        .join("; ");
+      const timeline = [season, year.trim()].filter(Boolean).join(" ");
+      const searchKeywords = [
+        keywords.trim(),
+        timeline && `Target recruiting timeline: ${timeline}`,
+      ]
+        .filter(Boolean)
+        .join(". ");
+      const res = await callAI<ScannedItem[]>("opportunities", {
+        industries: industries.map((v) => labelFor(INDUSTRIES, v)),
+        location: location || "No geographic preference",
+        keywords: searchKeywords,
+      });
+      if (res.setup) {
+        setSetup(res.setup);
+      } else if (res.upgrade) {
+        // This panel sits behind a TierGate, but render server pushback anyway.
+        setScanError(
+          res.error ??
+            `The scanner needs the ${res.upgrade.neededLabel} plan — upgrade in Account → Plan.`
+        );
+      } else if (res.error) {
+        setScanError(res.error);
+      } else if (Array.isArray(res.data)) {
+        setResults(
+          res.data
+            .filter(
+              (x) => x && typeof x.title === "string" && x.title.trim() !== ""
+            )
+            .slice(0, 15)
+        );
+        setAddedRows(new Set());
+      } else {
+        setScanError("The scan returned an unexpected result. Try again.");
+      }
+    });
+  }
+
+  function addItems(key: number | "all", entries: [number, ScannedItem][]) {
+    setAddingKey(key);
+    setAddError(null);
+    setNotice(null);
+    startAdd(async () => {
+      const res = await addScannedOpportunities(entries.map(([, item]) => item));
+      if (res.error) {
+        setAddError(res.error);
+      } else {
+        setAddedRows((prev) => {
+          const next = new Set(prev);
+          for (const [idx] of entries) next.add(idx);
+          return next;
+        });
+        const addedCount = res.added ?? 0;
+        const skippedCount = res.skipped ?? 0;
+        setNotice(
+          addedCount === 0
+            ? "Already on your board — nothing new to add."
+            : skippedCount > 0
+              ? `Added ${addedCount} to your board — ${skippedCount} already on it.`
+              : `Added ${addedCount} to your board.`
+        );
+      }
+      setAddingKey(null);
+    });
+  }
+
+  const remaining = (results ?? [])
+    .map((item, idx) => [idx, item] as [number, ScannedItem])
+    .filter(([idx]) => !addedRows.has(idx));
+
   return (
-    <Card className="mb-4 border-dashed bg-gradient-to-br from-brand-50 via-brand-50/60 to-white p-5">
+    <div className="rounded-2xl border border-dashed border-brand-200 bg-gradient-to-br from-brand-100 via-brand-50 to-white p-5 card-shadow">
       <div className="flex flex-wrap items-center gap-4">
         <div className="rounded-2xl bg-brand-100 p-3 text-brand-600">
           <Sparkles className="h-6 w-6" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-brand-900">
-            AI opportunity scanner — coming soon
-          </p>
+          <p className="font-semibold text-brand-900">AI opportunity scanner</p>
           <p className="mt-0.5 text-sm text-zinc-500">
-            One click pulls fresh internship postings for your target
-            industries, straight into this board.
+            Pick your targets and scan the live web for internships and
+            programs that are open right now.
           </p>
         </div>
-        <Button disabled>
-          <Sparkles className="h-4 w-4" /> Scan for latest
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {INDUSTRIES.map((i) => {
+          const on = industries.includes(i.value);
+          return (
+            <button
+              key={i.value}
+              type="button"
+              onClick={() => toggleIndustry(i.value)}
+              aria-pressed={on}
+              className={cn(
+                "cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                on
+                  ? "border-brand-500 bg-brand-500 text-white"
+                  : "border-brand-200 bg-white text-zinc-600 hover:border-brand-300 hover:text-brand-700"
+              )}
+            >
+              {i.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <Field label="Country">
+          <Input
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            placeholder="United States"
+          />
+        </Field>
+        <Field label="State / region">
+          <Input
+            value={stateRegion}
+            onChange={(e) => setStateRegion(e.target.value)}
+            placeholder="California"
+          />
+        </Field>
+        <Field label="City">
+          <Input
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder="San Francisco"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-3 grid items-end gap-2 sm:grid-cols-[10rem_8rem_minmax(0,1fr)_auto]">
+        <Field label="Season">
+          <Select value={season} onChange={(e) => setSeason(e.target.value)}>
+            <option value="">Any season</option>
+            <option value="Fall">Fall</option>
+            <option value="Winter">Winter</option>
+            <option value="Spring">Spring</option>
+            <option value="Summer">Summer</option>
+          </Select>
+        </Field>
+        <Field label="Year">
+          <Input
+            type="number"
+            min={2020}
+            max={2100}
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            placeholder="2027"
+          />
+        </Field>
+        <Field label="Keywords">
+          <Input
+            value={keywords}
+            onChange={(e) => setKeywords(e.target.value)}
+            placeholder="sophomore, M&A, rotational..."
+          />
+        </Field>
+        <Button
+          onClick={scan}
+          disabled={scanning}
+          variant={results === null ? "primary" : "secondary"}
+          className="w-full sm:w-auto"
+        >
+          {scanning ? (
+            <Spinner />
+          ) : results === null ? (
+            <Sparkles className="h-4 w-4" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {results === null ? "Scan for latest" : "Refresh list"}
         </Button>
       </div>
-    </Card>
+
+      {scanning && (
+        <div className="mt-4 flex items-center gap-3 rounded-xl border border-brand-100 bg-white px-4 py-3 text-sm text-zinc-500">
+          <Spinner className="shrink-0 text-brand-500" />
+          Scanning the live web for fresh postings — this usually takes 30–90
+          seconds. Worth the wait.
+        </div>
+      )}
+
+      {setup && (
+        <div className="mt-4 flex items-start gap-3 rounded-xl border border-brand-200 bg-white p-4">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-brand-900">
+              One quick setup step first
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-500">{setup}</p>
+          </div>
+        </div>
+      )}
+
+      {scanError && <p className="mt-3 text-sm text-rose-600">{scanError}</p>}
+
+      {results !== null &&
+        !scanning &&
+        (results.length === 0 ? (
+          <p className="mt-4 text-sm text-zinc-500">
+            The scan came back empty — try different industries or keywords.
+          </p>
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-xl border border-brand-100 bg-white">
+            <div className="flex flex-wrap items-center gap-2 border-b border-brand-100 px-4 py-2.5">
+              <p className="text-xs font-medium text-zinc-500">
+                Found {results.length} — fresh from the web, so double-check
+                details before applying.
+              </p>
+              <div className="ml-auto">
+                {remaining.length > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={addPending}
+                    onClick={() => addItems("all", remaining)}
+                  >
+                    {addPending && addingKey === "all" ? (
+                      <Spinner />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}{" "}
+                    Add all
+                  </Button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                    <CheckCircle2 className="h-4 w-4" /> All on your board
+                  </span>
+                )}
+              </div>
+            </div>
+            {(notice || addError) && (
+              <div className="border-b border-brand-100 px-4 py-2">
+                {notice && (
+                  <p className="text-xs font-medium text-emerald-600">
+                    {notice}
+                  </p>
+                )}
+                {addError && <p className="text-xs text-rose-600">{addError}</p>}
+              </div>
+            )}
+            <ul className="divide-y divide-brand-50">
+              {results.map((item, idx) => (
+                <li
+                  key={`${idx}-${item.title}`}
+                  className="flex flex-wrap items-start gap-3 px-4 py-3 sm:flex-nowrap"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-1.5">
+                      <p className="text-sm font-medium leading-snug text-brand-900">
+                        {item.title}
+                      </p>
+                      {item.link && (
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open posting"
+                          className="mt-0.5 shrink-0 rounded p-0.5 text-brand-400 transition-colors hover:bg-brand-50 hover:text-brand-600"
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      {[item.company, item.location]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                      {item.source ? ` · via ${item.source}` : ""}
+                    </p>
+                    {(item.industry || item.deadline) && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {item.industry &&
+                          INDUSTRIES.some((i) => i.value === item.industry) && (
+                            <Badge>{labelFor(INDUSTRIES, item.industry)}</Badge>
+                          )}
+                        {item.deadline && DEADLINE_RE.test(item.deadline) && (
+                          <Badge className="bg-zinc-100 text-zinc-600">
+                            <CalendarClock className="h-3 w-3" /> Due{" "}
+                            {formatDate(item.deadline)}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    {item.notes && (
+                      <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                        {item.notes}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 pt-0.5">
+                    {addedRows.has(idx) ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Added
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={addPending}
+                        onClick={() => addItems(idx, [[idx, item]])}
+                      >
+                        {addPending && addingKey === idx ? (
+                          <Spinner />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5" />
+                        )}{" "}
+                        Add to board
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+    </div>
   );
 }
 
@@ -239,7 +599,13 @@ function OpportunityForm({
   }
 
   return (
-    <form action={submit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(new FormData(e.currentTarget));
+      }}
+      className="space-y-4"
+    >
       {opportunity && <input type="hidden" name="id" value={opportunity.id} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -500,8 +866,10 @@ function OpportunityCard({
 
 export function OpportunitiesView({
   opportunities,
+  targetIndustries,
 }: {
   opportunities: Opportunity[];
+  targetIndustries: string[];
 }) {
   const [statusFilter, setStatusFilter] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
@@ -530,7 +898,16 @@ export function OpportunitiesView({
         }
       />
 
-      <ScannerPlaceholder />
+      <div className="mb-4">
+        <TierGate
+          feature="ai_import"
+          title="AI opportunity scanner"
+          blurb="Fresh internships and programs scanned from the live web, matched to your industries."
+          variant="card"
+        >
+          <OpportunityScanner defaultIndustries={targetIndustries} />
+        </TierGate>
+      </div>
       <HuntingSpots />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

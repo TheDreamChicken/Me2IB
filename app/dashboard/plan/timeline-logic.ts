@@ -124,12 +124,14 @@ export function computeTimeline(input: TimelineInput): Timeline {
   let cycleNote: string;
 
   if (input.industry === "finance") {
-    // Junior-summer IB recruiting opens ~18-24 months ahead:
-    // apps open Jan–Jun of SOPHOMORE year (spring of grad_year - 2).
+    // Firm timing varies sharply. Some large-bank processes appear in
+    // sophomore winter/spring; others open in the summer or early junior fall.
+    // Treat January–October as the active watch/apply window, not a promise
+    // that every firm waits until January of junior year.
     appsOpen = idx(S - 1, 1);
-    appsClose = idx(S - 1, 6);
-    interviewsEnd = idx(S - 1, 10);
-    cycleNote = `Finance recruits brutally early. Applications for summer ${S} internships open roughly ${monthLabel(appsOpen)}–${monthLabel(appsClose)} — that's sophomore spring, a full 18–24 months before the internship starts. Interviews (HireVues, first rounds, superdays) roll on from there through about ${monthLabel(interviewsEnd)}, and firms review on a rolling basis — early applicants win.`;
+    appsClose = idx(S - 1, 10);
+    interviewsEnd = idx(S - 1, 12);
+    cycleNote = `Finance timing is firm-specific and moves constantly. For summer ${S}, start tracking openings by ${monthLabel(appsOpen)}: some banks recruit in sophomore winter/spring, while others open in summer or early junior fall. Major windows can run through about ${monthLabel(appsClose)}, with interviews and late waves continuing into ${monthLabel(interviewsEnd)}. Networking and technical prep begin before any application opens, and rolling review still rewards early applicants.`;
   } else if (input.industry === "consulting") {
     // Consulting has moved way up and now essentially matches banking:
     // apps for junior summer open Jan–Jun of SOPHOMORE year (sophomore

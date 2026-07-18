@@ -158,10 +158,11 @@ export const STANDINGS = [
   { value: "masters", label: "Master's student" },
 ] as const;
 
+// Subscription tiers — full definitions (prices, features, gating) in lib/tiers.ts.
 export const TIER_LEVELS = [
-  { value: "free", label: "Free", color: "bg-zinc-100 text-zinc-600" },
-  { value: "plus", label: "Plus", color: "bg-brand-100 text-brand-700" },
-  { value: "pro", label: "Pro", color: "bg-amber-100 text-amber-700" },
+  { value: "free", label: "Still Cold", color: "bg-sky-100 text-sky-700" },
+  { value: "warming", label: "Warming Up", color: "bg-amber-100 text-amber-700" },
+  { value: "heat", label: "In The Heat", color: "bg-rose-100 text-rose-600" },
 ] as const;
 
 export function labelFor(

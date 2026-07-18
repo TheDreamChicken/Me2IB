@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { TierProvider } from "@/components/tier-context";
 import { LinkedInIcon } from "@/components/icons";
 
 export default async function DashboardLayout({
@@ -18,9 +19,11 @@ export default async function DashboardLayout({
     redirect("/login?next=/dashboard");
   }
 
+  // select("*") so this keeps working even before schema.sql adds newer
+  // columns like is_admin.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name")
+    .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -29,9 +32,14 @@ export default async function DashboardLayout({
       <Sidebar
         name={profile?.full_name ?? (user.user_metadata?.full_name as string) ?? null}
         email={user.email ?? null}
+        avatarUrl={profile?.avatar_url ?? null}
+        tier={profile?.tier ?? null}
+        isAdmin={!!profile?.is_admin}
       />
       <main className="flex min-w-0 flex-1 flex-col px-4 py-6 sm:px-8 sm:py-8">
-        <div className="mx-auto w-full max-w-6xl flex-1">{children}</div>
+        <div className="mx-auto w-full max-w-6xl flex-1">
+          <TierProvider tier={profile?.tier ?? null}>{children}</TierProvider>
+        </div>
         <footer className="mx-auto mt-10 w-full max-w-6xl border-t border-brand-100 pt-4 text-center text-xs text-zinc-400">
           created by Reyan{" "}
           <a

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ArrowLeft, ArrowRight, PenLine } from "lucide-react";
+import { ArrowLeft, ArrowRight, PenLine, Sparkles } from "lucide-react";
 import { LinkedInIcon } from "@/components/icons";
 import type { Contact } from "@/lib/types";
 import { CONNECTION_STRENGTHS, INDUSTRIES } from "@/lib/constants";
 import { upsertContact } from "@/lib/actions/contacts";
+import { callAI } from "@/lib/ai-client";
 import {
   Button,
   Field,
@@ -15,36 +16,6 @@ import {
   Textarea,
   cn,
 } from "@/components/ui";
-
-/* ------------------------------------------------------------------ */
-/* LinkedIn slug → name guess                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * Derive a display name from a LinkedIn profile URL slug.
- * e.g. linkedin.com/in/john-smith-1a2b3 -> "John Smith"
- * Trailing digit/hex id fragments are stripped; hyphen/period-separated
- * words are title-cased. Returns "" when no sensible name can be guessed.
- */
-function nameFromLinkedInUrl(url: string): string {
-  const match = url.match(/linkedin\.com\/in\/([^/?#]+)/i);
-  if (!match) return "";
-  let slug = match[1];
-  try {
-    slug = decodeURIComponent(slug);
-  } catch {
-    // Keep the raw slug if it isn't valid percent-encoding.
-  }
-  const looksLikeId = (w: string) => /^[0-9a-f]+$/i.test(w) && /\d/.test(w);
-  const words = slug.split(/[-.]+/).filter(Boolean);
-  while (words.length > 1 && looksLikeId(words[words.length - 1])) {
-    words.pop();
-  }
-  if (words.length === 0 || words.every(looksLikeId)) return "";
-  return words
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
 
 /* ------------------------------------------------------------------ */
 /* Small pieces                                                        */
@@ -136,6 +107,32 @@ type FormState = {
   status: string;
 };
 
+/** Fields the parse_contact AI task can return — keys map 1:1 to FormState. */
+const PARSE_KEYS = [
+  "name",
+  "company",
+  "position",
+  "location",
+  "industry",
+  "email",
+  "phone",
+  "linkedin_url",
+  "photo_url",
+  "alma_mater",
+  "shared_interests",
+  "relationship",
+] as const;
+
+type ParsedContact = Partial<
+  Record<(typeof PARSE_KEYS)[number], string | null>
+>;
+
+type LinkedInProfileResponse = {
+  profileText?: string;
+  photoUrl?: string | null;
+  error?: string;
+};
+
 export function ContactForm({
   contact,
   onDone,
@@ -146,9 +143,14 @@ export function ContactForm({
   const isEdit = !!contact;
   const [step, setStep] = useState<1 | 2>(1);
   const [mode, setMode] = useState<"linkedin" | "scratch">("linkedin");
-  const [nameWasGuessed, setNameWasGuessed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Public page metadata first, then exact-URL AI web research as a fallback.
+  const [parsePending, startParse] = useTransition();
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [parseSetup, setParseSetup] = useState<string | null>(null);
+  const [parseDone, setParseDone] = useState(false);
 
   const [form, setForm] = useState<FormState>(() => ({
     name: contact?.name ?? "",
@@ -181,29 +183,88 @@ export function ContactForm({
     ) =>
       setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  /** Fill the name from the LinkedIn slug if the user hasn't typed one. */
-  function guessNameFromUrl() {
-    if (form.name.trim()) return;
-    const guess = nameFromLinkedInUrl(form.linkedin_url);
-    if (!guess) return;
-    setNameWasGuessed(true);
-    setForm((f) => ({ ...f, name: guess }));
+  /** Pull the public profile from the URL, then merge every field it exposes. */
+  function runParse() {
+    const linkedinUrl = form.linkedin_url.trim();
+    if (!linkedinUrl) return;
+    setParseError(null);
+    setParseSetup(null);
+    setParseDone(false);
+    startParse(async () => {
+      let pulled: LinkedInProfileResponse = {};
+      let pullWarning: string | null = null;
+      try {
+        const response = await fetch(
+          `/dashboard/contacts/linkedin?url=${encodeURIComponent(linkedinUrl)}`
+        );
+        pulled = (await response.json()) as LinkedInProfileResponse;
+        if (!response.ok) {
+          pullWarning = pulled.error ?? "LinkedIn blocked the direct profile page.";
+          pulled = {};
+        }
+      } catch {
+        pullWarning = "LinkedIn blocked the direct profile page.";
+      }
+
+      if (pulled.photoUrl?.trim()) {
+        setForm((current) => ({
+          ...current,
+          photo_url: pulled.photoUrl!.trim(),
+        }));
+      }
+
+      const res = await callAI<ParsedContact>("parse_contact", {
+        url: linkedinUrl,
+        text: pulled.profileText ?? "",
+      });
+      if (res.setup) {
+        setParseSetup(res.setup);
+        return;
+      }
+      if (res.error || res.upgrade) {
+        setParseError(
+          res.error ?? pullWarning ?? "That didn't go through — try again."
+        );
+        return;
+      }
+      const data = res.data;
+      const hasUsableData =
+        !!data &&
+        PARSE_KEYS.some((key) =>
+          typeof data[key] === "string" ? !!data[key]?.trim() : false
+        );
+      if (!data || !hasUsableData) {
+        setParseError(
+          pullWarning ??
+            "No verifiable public details came back. Check that the URL is the right public profile."
+        );
+        return;
+      }
+      setForm((f) => {
+        const next = { ...f };
+        for (const k of PARSE_KEYS) {
+          const raw = data[k];
+          const v = typeof raw === "string" ? raw.trim() : "";
+          if (!v) continue;
+          // Only accept industries from our fixed vocabulary.
+          if (k === "industry" && !INDUSTRIES.some((i) => i.value === v)) {
+            continue;
+          }
+          if (!next[k].trim()) next[k] = v;
+        }
+        if (pulled.photoUrl?.trim()) next.photo_url = pulled.photoUrl.trim();
+        return next;
+      });
+      setParseDone(true);
+    });
   }
 
   function goNext() {
-    let name = form.name.trim();
-    if (!name && mode === "linkedin") {
-      const guess = nameFromLinkedInUrl(form.linkedin_url);
-      if (guess) {
-        name = guess;
-        setNameWasGuessed(true);
-        setForm((f) => ({ ...f, name: guess }));
-      }
-    }
+    const name = form.name.trim();
     if (!name) {
       setError(
         mode === "linkedin" && !isEdit
-          ? "Couldn't guess a name from that link — just type it in and you're set."
+          ? "LinkedIn didn't provide a verified name — type it in and you're set."
           : "Give them a name first — even just a first name works."
       );
       return;
@@ -231,20 +292,10 @@ export function ContactForm({
   }
 
   const nameField = (
-    <Field
-      label="Name *"
-      hint={
-        nameWasGuessed
-          ? "Guessed from the link — double-check the spelling."
-          : undefined
-      }
-    >
+    <Field label="Name *">
       <Input
         value={form.name}
-        onChange={(e) => {
-          setNameWasGuessed(false);
-          set("name")(e);
-        }}
+        onChange={set("name")}
         placeholder="Jordan Lee"
         autoFocus={isEdit || mode === "scratch"}
       />
@@ -252,7 +303,13 @@ export function ContactForm({
   );
 
   return (
-    <form action={submit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+      className="space-y-4"
+    >
       <StepIndicator step={step} />
 
       {/* ---------------- Step 1: the basics ---------------- */}
@@ -277,22 +334,68 @@ export function ContactForm({
             </div>
           )}
 
-          {!isEdit && mode === "linkedin" ? (
+          {mode === "linkedin" ? (
             <>
               <Field label="Their LinkedIn URL">
-                <Input
-                  value={form.linkedin_url}
-                  onChange={set("linkedin_url")}
-                  onBlur={guessNameFromUrl}
-                  placeholder="https://linkedin.com/in/..."
-                  autoFocus
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={form.linkedin_url}
+                    onChange={set("linkedin_url")}
+                    placeholder="https://linkedin.com/in/..."
+                    autoFocus={!isEdit}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={runParse}
+                    disabled={parsePending || !form.linkedin_url.trim()}
+                    className="shrink-0"
+                  >
+                    {parsePending ? (
+                      <Spinner />
+                    ) : (
+                      <>
+                        <Sparkles className="h-3.5 w-3.5" /> Pull profile
+                      </>
+                    )}
+                  </Button>
+                </div>
               </Field>
-              <p className="rounded-xl border border-dashed border-brand-200 bg-brand-50 px-3 py-2 text-xs leading-relaxed text-brand-700">
-                We&apos;ll auto-pull their photo, role, and location once the AI
-                connector ships — for now this grabs the link + name, and you
-                can fill the rest in a sec.
-              </p>
+              <div className="space-y-2 rounded-2xl border border-dashed border-brand-200 bg-brand-50/60 p-3">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-brand-900/80">
+                  <Sparkles className="h-3.5 w-3.5 text-brand-500" />
+                  Pull everything public
+                </p>
+                <p className="text-xs leading-relaxed text-zinc-500">
+                  One click reads the public profile, fills every contact field
+                  it can verify, and uses the profile photo from that same link.
+                </p>
+                {parseDone && !parsePending && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-600">
+                    {form.photo_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={form.photo_url}
+                        alt="Pulled LinkedIn profile"
+                        className="h-8 w-8 rounded-lg object-cover"
+                      />
+                    )}
+                    Filled what LinkedIn exposed — give it a once-over.
+                  </div>
+                )}
+                {parseSetup && (
+                  <div className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-xs leading-relaxed text-brand-700">
+                    <span className="font-medium">
+                      AI isn&apos;t set up yet — one quick step:
+                    </span>{" "}
+                    {parseSetup}
+                  </div>
+                )}
+                {parseError && (
+                  <p className="text-xs text-rose-600">{parseError}</p>
+                )}
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">{nameField}</div>
                 <Field label="Company">
@@ -301,15 +404,21 @@ export function ContactForm({
                 <Field label="Position">
                   <Input value={form.position} onChange={set("position")} />
                 </Field>
-                <div className="sm:col-span-2">
-                  <Field label="Email">
-                    <Input
-                      type="email"
-                      value={form.email}
-                      onChange={set("email")}
-                    />
-                  </Field>
-                </div>
+                <Field label="Email">
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={set("email")}
+                  />
+                </Field>
+                <Field label="Phone">
+                  <Input
+                    type="tel"
+                    value={form.phone}
+                    onChange={set("phone")}
+                    placeholder="(555) 123-4567"
+                  />
+                </Field>
               </div>
             </>
           ) : (
@@ -326,6 +435,14 @@ export function ContactForm({
                   type="email"
                   value={form.email}
                   onChange={set("email")}
+                />
+              </Field>
+              <Field label="Phone">
+                <Input
+                  type="tel"
+                  value={form.phone}
+                  onChange={set("phone")}
+                  placeholder="(555) 123-4567"
                 />
               </Field>
               <Field label="LinkedIn URL">
@@ -353,6 +470,18 @@ export function ContactForm({
                   value={form.how_met}
                   onChange={set("how_met")}
                   placeholder="Coffee chat via alumni database..."
+                />
+              </Field>
+            </div>
+            <div className="sm:col-span-2">
+              <Field
+                label="Relationship"
+                hint="One line on who they are / what they do."
+              >
+                <Input
+                  value={form.relationship}
+                  onChange={set("relationship")}
+                  placeholder="Second-year IB analyst, my club's alum mentor..."
                 />
               </Field>
             </div>
@@ -427,12 +556,20 @@ export function ContactForm({
           <Field label="Notes">
             <Textarea value={form.notes} onChange={set("notes")} />
           </Field>
-          <Field
-            label="Photo URL"
-            hint="(optional — auto photo pulling is coming)"
-          >
-            <Input value={form.photo_url} onChange={set("photo_url")} />
-          </Field>
+          {form.photo_url && (
+            <div className="flex items-center gap-3 rounded-xl bg-brand-50 p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={form.photo_url}
+                alt="LinkedIn profile"
+                className="h-10 w-10 rounded-xl object-cover"
+              />
+              <div>
+                <p className="text-xs font-medium text-brand-900">Profile photo</p>
+                <p className="text-xs text-zinc-500">Pulled from the LinkedIn URL.</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -461,12 +598,17 @@ export function ContactForm({
           <Button type="button" variant="secondary" onClick={onDone}>
             Cancel
           </Button>
+          {/* Both footer buttons submit; the form action routes step 1 to
+              goNext (so Enter advances too). Distinct keys make React swap
+              DOM nodes between steps instead of mutating one button's type
+              mid-click, which used to fire a phantom submit that saved a
+              half-filled contact. */}
           {step === 1 ? (
-            <Button type="button" onClick={goNext}>
+            <Button key="next" type="submit">
               Next <ArrowRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button type="submit" disabled={pending}>
+            <Button key="save" type="submit" disabled={pending}>
               {pending ? <Spinner /> : isEdit ? "Save changes" : "Add contact"}
             </Button>
           )}
