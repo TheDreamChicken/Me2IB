@@ -31,6 +31,8 @@ import { callAI } from "@/lib/ai-client";
 import { TierGate } from "@/components/tier-gate";
 import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
 import { ContactForm } from "./contact-form";
+import { isUnavatarImportPhoto } from "./linkedin-import-state";
+import { UnavatarLink } from "./unavatar-attribution";
 import {
   Badge,
   Button,
@@ -411,9 +413,11 @@ function ContactDetail({
 export function ContactsView({
   contacts,
   profile,
+  userId,
 }: {
   contacts: Contact[];
   profile: Profile | null;
+  userId: string;
 }) {
   const now = useNow();
   const [query, setQuery] = useState("");
@@ -448,6 +452,9 @@ export function ContactsView({
   const active = contacts.filter((c) => c.status !== "archived");
   const overdueCount = active.filter(isOverdue).length;
   const strongCount = active.filter((c) => c.connection_strength >= 4).length;
+  const usesUnavatarPhotos = contacts.some((contact) =>
+    isUnavatarImportPhoto(contact.photo_url ?? "")
+  );
 
   return (
     <div>
@@ -578,13 +585,25 @@ export function ContactsView({
         </div>
       )}
 
+      {usesUnavatarPhotos && (
+        <p className="mt-4 text-right text-[11px] text-zinc-400">
+          LinkedIn avatar fallback provided by <UnavatarLink />.
+        </p>
+      )}
+
       {/* Add */}
       <Modal
         open={adding}
         onClose={() => setAdding(false)}
         title="Add someone new"
       >
-        {adding && <ContactForm contact={null} onDone={() => setAdding(false)} />}
+        {adding && (
+          <ContactForm
+            contact={null}
+            userId={userId}
+            onDone={() => setAdding(false)}
+          />
+        )}
       </Modal>
 
       {/* Detail + edit share one persistent overlay so switching views never
@@ -602,6 +621,7 @@ export function ContactsView({
           <ContactForm
             key={editing.id}
             contact={editing}
+            userId={userId}
             onDone={() => setEditing(null)}
           />
         ) : selected ? (

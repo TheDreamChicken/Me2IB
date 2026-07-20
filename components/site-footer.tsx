@@ -33,6 +33,14 @@ export function SiteFooter() {
           . Northwestern University. Just as confused about recruitment as you
           were.
         </p>
+        <p className="text-xs text-zinc-400">
+          <a
+            href="https://unavatar.io"
+            className="underline decoration-zinc-300 underline-offset-2 hover:text-brand-700"
+          >
+            Avatars provided by Unavatar
+          </a>
+        </p>
       </div>
     </footer>
   );

@@ -12,6 +12,11 @@ const PROFILE_PHOTO_PATH = /\/dms\/image\/.*profile-(?:display|framed)photo(?:[-
 const LINKEDIN_PROFILE_HOST = /^(?:(?:www|[a-z]{2,3})\.)?linkedin\.com$/i;
 const MASKED_VALUE = /^[\s*•_.-]+$/;
 
+function containsMaskedFragment(value: string): boolean {
+  const maskMarkers = value.match(/[*•_]/g)?.length ?? 0;
+  return maskMarkers >= 2 || value.includes("…") || /\.{3,}/.test(value);
+}
+
 export type LinkedInAccess = "public" | "authwall" | "blocked" | "unavailable";
 
 export type DirectContactFields = {
@@ -158,7 +163,12 @@ function collectPeople(value: unknown, people: UnknownRecord[]): void {
 function usableString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const cleaned = cleanText(value);
-  if (!cleaned || MASKED_VALUE.test(cleaned) || !/[\p{L}\p{N}]/u.test(cleaned)) {
+  if (
+    !cleaned ||
+    MASKED_VALUE.test(cleaned) ||
+    containsMaskedFragment(cleaned) ||
+    !/[\p{L}\p{N}]/u.test(cleaned)
+  ) {
     return null;
   }
   return cleaned;
@@ -173,6 +183,18 @@ function firstUsableString(value: unknown): string | null {
     return null;
   }
   return usableString(value);
+}
+
+function usableEmail(value: unknown): string | null {
+  const raw = firstUsableString(value)?.replace(/^mailto:/i, "") ?? null;
+  return raw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : null;
+}
+
+function usablePhone(value: unknown): string | null {
+  const raw = firstUsableString(value);
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  return digits.length >= 7 && digits.length <= 20 ? raw : null;
 }
 
 function firstNamedValue(value: unknown): string | null {
@@ -300,7 +322,7 @@ export function normalizeLinkedInProfileUrl(raw: string): URL | null {
     }
     const match = url.pathname.match(/^\/in\/([a-z0-9_-]+)\/?$/i);
     if (!match) return null;
-    return new URL(`https://www.linkedin.com/in/${match[1]}`);
+    return new URL(`https://www.linkedin.com/in/${match[1].toLowerCase()}`);
   } catch {
     return null;
   }
@@ -353,6 +375,11 @@ function photoCandidates(
   person: UnknownRecord | null,
   meta: Map<string, string>
 ): string[] {
+  // Metadata alone is not identity evidence: authwalls and generic LinkedIn
+  // pages can expose a perfectly valid licdn.com image for somebody else. Only
+  // consider page-level metadata after an exact canonical Person record ties
+  // this document to the requested profile.
+  if (!person) return [];
   const candidates: PhotoCandidate[] = [];
   for (const value of personImageValues(person)) {
     addPhotoCandidate(candidates, value, 1_000, "exact-person-json-ld");
@@ -374,8 +401,8 @@ function isAuthwallPage(html: string, title: string): boolean {
 
 function accessFor(status: number, html: string, title: string, hasPerson: boolean): LinkedInAccess {
   if (status === 999 || status === 403 || status === 429) return "blocked";
-  if (status >= 200 && status < 300 && hasPerson) return "public";
   if (isAuthwallPage(html, title)) return "authwall";
+  if (status >= 200 && status < 300 && hasPerson) return "public";
   return "unavailable";
 }
 
@@ -387,8 +414,8 @@ function summarizeExactPerson(person: UnknownRecord | null): string {
     position: currentUsableString(person.jobTitle),
     location: personLocation(person),
     school: firstNamedValue(person.alumniOf),
-    email: firstUsableString(person.email),
-    phone: firstUsableString(person.telephone),
+    email: usableEmail(person.email),
+    phone: usablePhone(person.telephone),
   };
   return Object.entries(values)
     .filter((entry): entry is [string, string] => Boolean(entry[1]))
@@ -410,15 +437,19 @@ export function parseLinkedInProfile(
     meta.get("twitter:description") ??
     meta.get("description") ??
     "";
-  const name = usableString(recordValue(person, "name"));
-  const company = currentNamedValue(recordValue(person, "worksFor"));
-  const position = currentUsableString(recordValue(person, "jobTitle"));
-  const location = personLocation(person);
-  const almaMater = firstNamedValue(recordValue(person, "alumniOf"));
-  const email = firstUsableString(recordValue(person, "email"));
-  const phone = firstUsableString(recordValue(person, "telephone"));
-  const candidates = photoCandidates(person, meta);
-  const exactPersonSummary = summarizeExactPerson(person);
+  const access = accessFor(status, html, title, Boolean(person));
+  // Even if a block/error page happens to contain stale structured data, only
+  // a successful public profile response is trusted as direct identity data.
+  const publicPerson = access === "public" ? person : null;
+  const name = usableString(recordValue(publicPerson, "name"));
+  const company = currentNamedValue(recordValue(publicPerson, "worksFor"));
+  const position = currentUsableString(recordValue(publicPerson, "jobTitle"));
+  const location = personLocation(publicPerson);
+  const almaMater = firstNamedValue(recordValue(publicPerson, "alumniOf"));
+  const email = usableEmail(recordValue(publicPerson, "email"));
+  const phone = usablePhone(recordValue(publicPerson, "telephone"));
+  const candidates = photoCandidates(publicPerson, meta);
+  const exactPersonSummary = summarizeExactPerson(publicPerson);
   const fields: DirectContactFields = { linkedin_url: canonicalUrl };
   if (name) fields.name = name;
   if (company) fields.company = company;
@@ -429,13 +460,13 @@ export function parseLinkedInProfile(
   if (phone) fields.phone = phone;
 
   return {
-    access: accessFor(status, html, title, Boolean(person)),
+    access,
     fields,
     title,
     description,
     exactPersonSummary,
     visibleText: pageText(html),
     photoCandidates: candidates,
-    hasExactPerson: Boolean(person),
+    hasExactPerson: Boolean(publicPerson),
   };
 }

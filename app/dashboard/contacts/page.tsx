@@ -8,13 +8,16 @@ export const metadata: Metadata = { title: "Contacts" };
 export default async function ContactsPage() {
   const supabase = await createClient();
 
-  const [contactsRes, profileRes] = await Promise.all([
+  const [userRes, contactsRes, profileRes] = await Promise.all([
+    supabase.auth.getUser(),
     supabase
       .from("contacts")
       .select("*")
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("*").maybeSingle(),
   ]);
+  const user = userRes.data.user;
+  if (!user) throw new Error("Not logged in.");
 
   if (contactsRes.error) {
     throw new Error("Couldn't load contacts: " + contactsRes.error.message);
@@ -27,6 +30,7 @@ export default async function ContactsPage() {
     <ContactsView
       contacts={(contactsRes.data ?? []) as Contact[]}
       profile={(profileRes.data ?? null) as Profile | null}
+      userId={user.id}
     />
   );
 }

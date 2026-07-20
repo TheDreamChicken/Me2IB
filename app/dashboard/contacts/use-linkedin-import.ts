@@ -6,7 +6,9 @@ import { INDUSTRIES } from "@/lib/constants";
 import {
   hasMeaningfulFields,
   importFormReducer,
-  isLinkedInProfilePhoto,
+  linkedInProfileKey,
+  profileBoundContact,
+  sanitizeParsedContact,
   type FormState,
   type ParsedContact,
 } from "./linkedin-import-state";
@@ -46,8 +48,12 @@ function normalizedIndustry(raw: string): string {
 function normalizeParsedContact(
   data: ParsedContact | undefined
 ): ParsedContact | undefined {
-  if (!data?.industry) return data;
-  return { ...data, industry: normalizedIndustry(data.industry) || null };
+  const sanitized = sanitizeParsedContact(data);
+  if (!sanitized?.industry) return sanitized;
+  return {
+    ...sanitized,
+    industry: normalizedIndustry(sanitized.industry) || null,
+  };
 }
 
 function appendNotice(base: string | null, addition: string): string {
@@ -60,6 +66,7 @@ export function useLinkedInImport(initialForm: FormState) {
     form: initialForm,
     importedBy: {},
     manuallyEditedAt: {},
+    profileLinkedInKey: linkedInProfileKey(initialForm.linkedin_url),
   });
   const [parsePending, setParsePending] = useState(false);
   const [, startParse] = useTransition();
@@ -109,17 +116,13 @@ export function useLinkedInImport(initialForm: FormState) {
 
   function importedPhotoFailed(photoUrl: string) {
     const wasImportedThisSession = state.importedBy.photo_url !== undefined;
-    if (
-      state.form.photo_url !== photoUrl ||
-      (!wasImportedThisSession && !isLinkedInProfilePhoto(photoUrl))
-    ) {
+    if (state.form.photo_url !== photoUrl || !wasImportedThisSession) {
       return;
     }
     const photoWasOnlyImport = wasImportedThisSession && Object.keys(state.importedBy).every(
       (key) => key === "photo_url"
     );
     dispatch({ type: "remove_imported_photo", photoUrl });
-    if (!wasImportedThisSession) return;
     if (photoWasOnlyImport) {
       setParseDone(false);
       setParseError(
@@ -155,10 +158,12 @@ export function useLinkedInImport(initialForm: FormState) {
         let pulled: LinkedInProfileResponse = {};
         let pullWarning: string | null = null;
         try {
-          const response = await fetch(
-            `/dashboard/contacts/linkedin?url=${encodeURIComponent(linkedinUrl)}`,
-            { signal: controller.signal }
-          );
+          const response = await fetch("/dashboard/contacts/linkedin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: linkedinUrl }),
+            signal: controller.signal,
+          });
           pulled = (await response.json()) as LinkedInProfileResponse;
           if (!isCurrent()) return;
           if (!response.ok) {
@@ -205,7 +210,7 @@ export function useLinkedInImport(initialForm: FormState) {
             setParseDone(true);
             setParseNotice(
               pullWarning ??
-                "Verified the exact public LinkedIn details. AI could not check for additional public fields because it is not configured."
+                "Pulled public details tied to that LinkedIn URL. AI could not check for additional public fields because it is not configured. Review everything before saving."
             );
           } else if (pullWarning) {
             setParseError(pullWarning);
@@ -224,7 +229,8 @@ export function useLinkedInImport(initialForm: FormState) {
             setParseDone(true);
             setParseNotice(
               appendNotice(
-                pullWarning ?? "Verified the exact public LinkedIn details.",
+                pullWarning ??
+                  "Pulled public details tied to that LinkedIn URL. Review everything before saving.",
                 result.error
                   ? `The broader public-web check did not finish: ${result.error}`
                   : "The broader public-web check was not available for this account."
@@ -240,12 +246,17 @@ export function useLinkedInImport(initialForm: FormState) {
           return;
         }
 
-        const data = normalizeParsedContact(result.data);
+        const unboundData = normalizeParsedContact(result.data);
+        const data = profileBoundContact(unboundData, linkedinUrl);
         const aiUseful = hasMeaningfulFields(data);
-        const unboundAiPhoto = !directPhoto && Boolean(data?.photo_url?.trim());
+        const unboundAiFields = hasMeaningfulFields(unboundData) && !data;
+        const unboundAiPhoto =
+          !directPhoto && Boolean(unboundData?.photo_url?.trim());
         if (!directUseful && !aiUseful) {
           setParseError(
-            unboundAiPhoto
+            unboundAiFields
+              ? "Public web results could not be tied back to the exact LinkedIn URL, so I left them out instead of risking the wrong person."
+              : unboundAiPhoto
               ? "A possible photo was found, but it could not be tied safely to this exact profile, so I left it out. No other verifiable details came back."
               : pullWarning ??
                   "No verifiable public details came back. Check that the URL is the right public profile."
@@ -264,12 +275,18 @@ export function useLinkedInImport(initialForm: FormState) {
         let notice =
           pullWarning ??
           (directUseful
-            ? "Verified the exact public LinkedIn record first, then checked public web results for remaining fields."
+            ? "Checked the exact public LinkedIn record first, then corroborated remaining fields with public web results. Review everything before saving."
             : "Used only details corroborated from exact-identity public web results.");
         if (unboundAiPhoto) {
           notice = appendNotice(
             notice,
             "I left out a search-only photo because LinkedIn did not provide enough identity-bound evidence for it."
+          );
+        }
+        if (unboundAiFields) {
+          notice = appendNotice(
+            notice,
+            "I left out broader web fields that did not resolve back to this exact LinkedIn URL."
           );
         }
         setParseNotice(notice);

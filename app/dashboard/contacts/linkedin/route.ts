@@ -1,18 +1,37 @@
 import { createClient } from "@/lib/supabase/server";
 import {
-  normalizeLinkedInProfilePhotoUrl,
   normalizeLinkedInProfileUrl,
   parseLinkedInProfile,
   type DirectContactFields,
   type LinkedInAccess,
 } from "./profile-parser";
+import {
+  fetchValidatedLinkedInPhoto,
+  firstValidatedLinkedInPhoto,
+  resolveUnavatarPhoto,
+  type ValidatedPhoto,
+} from "./photo-pipeline";
+import {
+  persistPhoto,
+  storedPhoto,
+  type PhotoSource,
+  type SupabaseClient,
+} from "./photo-storage";
+
+export const maxDuration = 60;
 
 const LINKEDIN_HOME = "https://www.linkedin.com/";
 const MAX_PROFILE_TEXT = 18_000;
 const MAX_HTML_BYTES = 5_000_000;
-const MAX_IMAGE_BYTES = 10_000_000;
-const REQUEST_TIMEOUT_MS = 18_000;
-const PHOTO_TIMEOUT_MS = 8_000;
+const REQUEST_TIMEOUT_MS = 12_000;
+const PHOTO_TIMEOUT_MS = 10_000;
+const RESOLVER_TIMEOUT_MS = 12_000;
+const RESULT_CACHE_MS = 5 * 60_000;
+const EMPTY_RESULT_CACHE_MS = 20_000;
+const DIRECT_BLOCK_CIRCUIT_MS = 2 * 60_000;
+const RATE_WINDOW_MS = 5 * 60_000;
+const RATE_LIMIT = 20;
+const MAX_MEMORY_ENTRIES = 250;
 
 const LINKEDIN_HEADERS = {
   Accept: "text/html,application/xhtml+xml",
@@ -22,6 +41,25 @@ const LINKEDIN_HEADERS = {
 };
 
 type CookieJar = Map<string, string>;
+
+type LinkedInPayload = {
+  profileText: string;
+  photoUrl: string | null;
+  photoSource: PhotoSource | null;
+  fields: DirectContactFields;
+  access: LinkedInAccess;
+  warning?: string;
+};
+
+type CachedPayload = {
+  expiresAt: number;
+  payload: LinkedInPayload;
+};
+
+const resultCache = new Map<string, CachedPayload>();
+const inFlight = new Map<string, Promise<LinkedInPayload>>();
+const requestWindows = new Map<string, number[]>();
+let directBlockedUntil = 0;
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data, {
@@ -56,7 +94,10 @@ async function cancelBody(response: Response): Promise<void> {
   }
 }
 
-async function seedGuestSession(jar: CookieJar, signal: AbortSignal): Promise<void> {
+async function seedGuestSession(
+  jar: CookieJar,
+  signal: AbortSignal
+): Promise<number> {
   const response = await fetch(LINKEDIN_HOME, {
     cache: "no-store",
     redirect: "manual",
@@ -64,7 +105,9 @@ async function seedGuestSession(jar: CookieJar, signal: AbortSignal): Promise<vo
     headers: LINKEDIN_HEADERS,
   });
   mergeCookies(jar, response.headers);
+  const status = response.status;
   await cancelBody(response);
+  return status;
 }
 
 function safeLinkedInRedirect(raw: string, current: URL, profile: URL): URL | null {
@@ -79,7 +122,9 @@ function safeLinkedInRedirect(raw: string, current: URL, profile: URL): URL | nu
     ) {
       return null;
     }
-    const sameProfile = next.pathname.replace(/\/$/, "") === profile.pathname;
+    const sameProfile =
+      next.pathname.replace(/\/$/, "").toLowerCase() ===
+      profile.pathname.toLowerCase();
     return sameProfile || next.pathname === "/authwall" ? next : null;
   } catch {
     return null;
@@ -193,18 +238,46 @@ function profileText(
     .slice(0, MAX_PROFILE_TEXT);
 }
 
-function warningFor(access: LinkedInAccess, hasPhoto: boolean): string | undefined {
-  if (access === "public" && hasPhoto) return undefined;
-  if (access === "public") {
-    return "LinkedIn shared the public profile details, but no verifiable profile photo was available.";
+function warningFor(
+  access: LinkedInAccess,
+  photoSource: PhotoSource | null,
+  storageFailed: boolean
+): string | undefined {
+  let warning: string | undefined;
+  if (access === "public" && photoSource === "linkedin") {
+    warning = undefined;
+  } else if (access === "public" && photoSource === "unavatar") {
+    warning =
+      "LinkedIn shared the public details; a profile-photo candidate tied to that exact URL was recovered through the avatar fallback. Confirm the photo before saving.";
+  } else if (access === "public") {
+    warning =
+      "LinkedIn shared the public profile details, but no verifiable profile photo was available.";
+  } else if (access === "blocked" && photoSource === "unavatar") {
+    warning =
+      "LinkedIn throttled the direct details lookup, but a profile-photo candidate tied to that exact URL was recovered through the avatar fallback. I used exact-URL public web results for remaining fields; confirm the photo before saving.";
+  } else if (access === "authwall" && photoSource === "unavatar") {
+    warning =
+      "LinkedIn showed the importer a sign-in wall, but a profile-photo candidate tied to that exact URL was recovered through the avatar fallback. I used exact-URL public web results for remaining fields; confirm the photo before saving.";
+  } else if (access === "blocked") {
+    warning =
+      "LinkedIn throttled the direct lookup. I used exact-URL public web results for anything else I could verify.";
+  } else if (access === "authwall") {
+    warning =
+      "LinkedIn showed the importer a sign-in wall. I used exact-URL public web results for anything else I could verify.";
+  } else if (photoSource === "unavatar") {
+    warning =
+      "A profile-photo candidate tied to that exact URL was recovered through the avatar fallback. I used exact-URL public web results for remaining fields; confirm the photo before saving.";
+  } else {
+    warning =
+      "LinkedIn did not expose the direct profile this time. I used exact-URL public web results for anything else I could verify.";
   }
-  if (access === "blocked") {
-    return "LinkedIn throttled the direct lookup. I used exact-URL public web results for anything else I could verify.";
-  }
-  if (access === "authwall") {
-    return "LinkedIn showed the importer a sign-in wall. I used exact-URL public web results for anything else I could verify.";
-  }
-  return "LinkedIn did not expose the direct profile this time. I used exact-URL public web results for anything else I could verify.";
+  if (!storageFailed) return warning;
+  return [
+    warning,
+    "A photo was found but could not be saved. Avatar storage may need supabase/schema.sql re-run before photos can persist.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function fallbackPayload(profile: URL, warning: string) {
@@ -212,69 +285,187 @@ function fallbackPayload(profile: URL, warning: string) {
   return {
     profileText: profileText(profile, access),
     photoUrl: null,
+    photoSource: null,
     fields: { linkedin_url: profile.toString() } satisfies DirectContactFields,
     access,
     warning,
+  } satisfies LinkedInPayload;
+}
+
+function isBlockedStatus(status: number): boolean {
+  return status === 403 || status === 429 || status === 999;
+}
+
+function pruneMemory(now: number): void {
+  for (const [key, entry] of resultCache) {
+    if (entry.expiresAt <= now) resultCache.delete(key);
+  }
+  for (const [userId, times] of requestWindows) {
+    const recent = times.filter((time) => now - time < RATE_WINDOW_MS);
+    if (recent.length) requestWindows.set(userId, recent);
+    else requestWindows.delete(userId);
+  }
+  while (resultCache.size > MAX_MEMORY_ENTRIES) {
+    const oldest = resultCache.keys().next().value as string | undefined;
+    if (!oldest) break;
+    resultCache.delete(oldest);
+  }
+  while (requestWindows.size > MAX_MEMORY_ENTRIES) {
+    const oldest = requestWindows.keys().next().value as string | undefined;
+    if (!oldest) break;
+    requestWindows.delete(oldest);
+  }
+}
+
+function rateLimitRetryAfter(userId: string, now: number): number | null {
+  const recent = (requestWindows.get(userId) ?? []).filter(
+    (time) => now - time < RATE_WINDOW_MS
+  );
+  if (recent.length >= RATE_LIMIT) {
+    return Math.max(1, Math.ceil((RATE_WINDOW_MS - (now - recent[0])) / 1_000));
+  }
+  recent.push(now);
+  requestWindows.set(userId, recent);
+  return null;
+}
+
+async function processProfile(
+  profile: URL,
+  userId: string,
+  supabase: SupabaseClient
+): Promise<LinkedInPayload> {
+  const savedPhoto = await storedPhoto(supabase, userId, profile);
+  let access: LinkedInAccess = "unavailable";
+  let fields: DirectContactFields = { linkedin_url: profile.toString() };
+  let exactPersonSummary = "";
+  let title = "";
+  let description = "";
+  let visibleText = "";
+  let directCandidates: string[] = [];
+
+  if (Date.now() < directBlockedUntil) {
+    access = "blocked";
+  } else {
+    try {
+      const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+      const jar: CookieJar = new Map();
+      const seedStatus = await seedGuestSession(jar, signal);
+      if (isBlockedStatus(seedStatus)) {
+        directBlockedUntil = Date.now() + DIRECT_BLOCK_CIRCUIT_MS;
+        access = "blocked";
+      } else {
+        const response = await fetchProfile(profile, jar, signal);
+        if (isBlockedStatus(response.status)) {
+          directBlockedUntil = Date.now() + DIRECT_BLOCK_CIRCUIT_MS;
+          access = "blocked";
+          await cancelBody(response);
+        } else {
+          const html = await readHtml(response);
+          const parsed = parseLinkedInProfile(
+            html,
+            profile.toString(),
+            response.status
+          );
+          access = parsed.access;
+          fields = { ...parsed.fields };
+          exactPersonSummary = parsed.exactPersonSummary;
+          title = parsed.title;
+          description = parsed.description;
+          visibleText = parsed.visibleText;
+          directCandidates = parsed.photoCandidates;
+        }
+      }
+    } catch (error) {
+      console.error(
+        "LinkedIn public-profile lookup failed:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }
+
+  let photo: ValidatedPhoto | null = null;
+  let photoUrl: string | null = savedPhoto?.fresh ? savedPhoto.url : null;
+  let photoSource: PhotoSource | null = savedPhoto?.fresh
+    ? savedPhoto.source
+    : null;
+  if (!photoUrl && directCandidates.length) {
+    photo = await firstValidatedLinkedInPhoto(
+      directCandidates,
+      AbortSignal.timeout(PHOTO_TIMEOUT_MS)
+    );
+    if (photo) photoSource = "linkedin";
+  }
+
+  if (!photoUrl && !photo) {
+    try {
+      const candidate = await resolveUnavatarPhoto(
+        profile,
+        AbortSignal.timeout(RESOLVER_TIMEOUT_MS)
+      );
+      if (candidate) {
+        photo = await fetchValidatedLinkedInPhoto(
+          candidate,
+          AbortSignal.timeout(PHOTO_TIMEOUT_MS)
+        );
+        if (photo) photoSource = "unavatar";
+      }
+    } catch (error) {
+      console.error(
+        "LinkedIn avatar fallback failed:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }
+
+  let storageFailed = false;
+  if (photo && photoSource) {
+    photoUrl = await persistPhoto(supabase, userId, profile, photo, photoSource);
+    storageFailed = !photoUrl;
+  }
+  if (!photoUrl && savedPhoto) {
+    photoUrl = savedPhoto.url;
+    photoSource = savedPhoto.source;
+  }
+  delete fields.photo_url;
+  if (photoUrl) fields.photo_url = photoUrl;
+
+  return {
+    profileText: profileText(
+      profile,
+      access,
+      exactPersonSummary,
+      title,
+      description,
+      visibleText
+    ),
+    photoUrl,
+    photoSource: photoUrl ? photoSource : null,
+    fields,
+    access,
+    warning: warningFor(access, photoUrl ? photoSource : null, storageFailed),
   };
 }
 
-async function validatePhoto(raw: string, signal: AbortSignal): Promise<string | null> {
-  const normalized = normalizeLinkedInProfilePhotoUrl(raw);
-  if (!normalized) return null;
-  let current = new URL(normalized);
-  for (let redirects = 0; redirects < 3; redirects++) {
-    const response = await fetch(current, {
-      cache: "no-store",
-      redirect: "manual",
-      signal,
-      headers: {
-        Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8",
-        "User-Agent": LINKEDIN_HEADERS["User-Agent"],
-      },
-    });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get("location");
-      const next = location
-        ? normalizeLinkedInProfilePhotoUrl(new URL(location, current).toString())
-        : null;
-      await cancelBody(response);
-      if (!next) return null;
-      current = new URL(next);
-      continue;
-    }
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-    const contentLength = Number(response.headers.get("content-length"));
-    const isImage = /^image\/(?:avif|gif|jpeg|png|webp)(?:;|$)/i.test(contentType);
-    const saneSize = !Number.isFinite(contentLength) || contentLength <= MAX_IMAGE_BYTES;
-    const valid = response.ok && isImage && saneSize;
-    await cancelBody(response);
-    return valid ? current.toString() : null;
-  }
-  return null;
+function requestUrl(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const url = (value as Record<string, unknown>).url;
+  return typeof url === "string" ? url.trim() : null;
 }
 
-async function firstValidatedPhoto(candidates: string[]): Promise<string | null> {
-  const signal = AbortSignal.timeout(PHOTO_TIMEOUT_MS);
-  for (const candidate of candidates.slice(0, 3)) {
-    try {
-      const photo = await validatePhoto(candidate, signal);
-      if (photo) return photo;
-    } catch {
-      if (signal.aborted) return null;
-    }
-  }
-  return null;
-}
-
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return json({ error: "Not logged in." }, 401);
 
-  const searchParams = new URL(request.url).searchParams;
-  const rawUrl = searchParams.get("url")?.trim();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Send a LinkedIn profile URL." }, 400);
+  }
+  const rawUrl = requestUrl(body);
   if (!rawUrl) return json({ error: "Add a LinkedIn profile URL first." }, 400);
   const profile = normalizeLinkedInProfileUrl(rawUrl);
   if (!profile) {
@@ -284,31 +475,52 @@ export async function GET(request: Request) {
     );
   }
 
+  const now = Date.now();
+  pruneMemory(now);
+  const cacheKey = `${user.id}:${profile.toString()}`;
+  const cached = resultCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return json(cached.payload);
+
+  const running = inFlight.get(cacheKey);
+  if (running) {
+    try {
+      return json(await running);
+    } catch {
+      return json(
+        fallbackPayload(
+          profile,
+          "LinkedIn's public page could not be reached this time. I used exact-URL public web results for anything else I could verify."
+        )
+      );
+    }
+  }
+
+  const retryAfter = rateLimitRetryAfter(user.id, now);
+  if (retryAfter !== null) {
+    return Response.json(
+      {
+        error: `Too many profile pulls at once. Try again in about ${retryAfter} seconds.`,
+      },
+      {
+        status: 429,
+        headers: {
+          "Cache-Control": "private, no-store, max-age=0",
+          "Retry-After": String(retryAfter),
+        },
+      }
+    );
+  }
+
+  const work = processProfile(profile, user.id, supabase);
+  inFlight.set(cacheKey, work);
   try {
-    const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-    const jar: CookieJar = new Map();
-    await seedGuestSession(jar, signal);
-    const response = await fetchProfile(profile, jar, signal);
-    const html = await readHtml(response);
-    const parsed = parseLinkedInProfile(html, profile.toString(), response.status);
-    const photoUrl = await firstValidatedPhoto(parsed.photoCandidates);
-    const fields: DirectContactFields = { ...parsed.fields };
-    delete fields.photo_url;
-    if (photoUrl) fields.photo_url = photoUrl;
-    return json({
-      profileText: profileText(
-        profile,
-        parsed.access,
-        parsed.exactPersonSummary,
-        parsed.title,
-        parsed.description,
-        parsed.visibleText
-      ),
-      photoUrl,
-      fields,
-      access: parsed.access,
-      warning: warningFor(parsed.access, Boolean(photoUrl)),
+    const payload = await work;
+    resultCache.set(cacheKey, {
+      expiresAt:
+        Date.now() + (payload.photoUrl ? RESULT_CACHE_MS : EMPTY_RESULT_CACHE_MS),
+      payload,
     });
+    return json(payload);
   } catch (error) {
     console.error(
       "LinkedIn public-profile lookup failed:",
@@ -320,5 +532,7 @@ export async function GET(request: Request) {
         "LinkedIn's public page could not be reached this time. I used exact-URL public web results for anything else I could verify."
       )
     );
+  } finally {
+    if (inFlight.get(cacheKey) === work) inFlight.delete(cacheKey);
   }
 }

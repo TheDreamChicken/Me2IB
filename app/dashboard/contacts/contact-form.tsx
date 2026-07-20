@@ -10,6 +10,12 @@ import {
   useLinkedInImport,
   type FormState,
 } from "./use-linkedin-import";
+import { isUnavatarImportPhoto } from "./linkedin-import-state";
+import {
+  UnavatarAttribution,
+} from "./unavatar-attribution";
+import { ContactPhotoControl } from "./contact-photo-control";
+import { useContactPhotoUpload } from "./use-contact-photo-upload";
 import {
   Button,
   Field,
@@ -90,15 +96,18 @@ function StartOption({
 
 export function ContactForm({
   contact,
+  userId,
   onDone,
 }: {
   contact: Contact | null;
+  userId: string;
   onDone: () => void;
 }) {
   const isEdit = !!contact;
   const [step, setStep] = useState<1 | 2>(1);
   const [mode, setMode] = useState<"linkedin" | "scratch">("linkedin");
   const [error, setError] = useState<string | null>(null);
+  const [saveStatusUnknown, setSaveStatusUnknown] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const initialForm: FormState = {
@@ -136,6 +145,13 @@ export function ContactForm({
     runParse,
   } = useLinkedInImport(initialForm);
 
+  const hasUnavatarPhoto = isUnavatarImportPhoto(form.photo_url);
+  const photoUpload = useContactPhotoUpload({
+    userId,
+    initialUrl: contact?.photo_url ?? "",
+    onUrlChange: (url) => handleFieldChange("photo_url", url),
+  });
+
   function goNext() {
     const name = form.name.trim();
     if (!name) {
@@ -152,7 +168,7 @@ export function ContactForm({
 
   // Runs on form submit (including Enter). On step 1, Enter means "Next".
   function submit() {
-    if (parsePending) return;
+    if (parsePending || photoUpload.pending || saveStatusUnknown) return;
     if (step === 1) {
       goNext();
       return;
@@ -162,10 +178,24 @@ export function ContactForm({
     (Object.keys(form) as (keyof FormState)[]).forEach((k) =>
       fd.set(k, form[k])
     );
+    photoUpload.prepareSubmit(form.photo_url);
     startTransition(async () => {
-      const res = await upsertContact(fd);
-      if (res.error) setError(res.error);
-      else onDone();
+      try {
+        const res = await upsertContact(fd);
+        if (res.error) {
+          photoUpload.saveFailed();
+          setError(res.error);
+        } else {
+          photoUpload.saveSucceeded();
+          onDone();
+        }
+      } catch {
+        photoUpload.saveUncertain();
+        setSaveStatusUnknown(true);
+        setError(
+          "I couldn't confirm whether that save reached the server. Refresh Contacts before trying again so the photo stays safe."
+        );
+      }
     });
   }
 
@@ -277,6 +307,9 @@ export function ContactForm({
                     {parseNotice}
                   </p>
                 )}
+                {hasUnavatarPhoto && form.photo_url && !parsePending && (
+                  <UnavatarAttribution />
+                )}
                 {parseSetup && (
                   <div className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-xs leading-relaxed text-brand-700">
                     <span className="font-medium">
@@ -289,6 +322,17 @@ export function ContactForm({
                   <p className="text-xs text-rose-600">{parseError}</p>
                 )}
               </div>
+              {parseDone && !parsePending && !form.photo_url && (
+                <ContactPhotoControl
+                  compact
+                  photoUrl=""
+                  pending={photoUpload.pending}
+                  error={photoUpload.error}
+                  onFile={photoUpload.upload}
+                  onRemove={photoUpload.remove}
+                  onImageError={importedPhotoFailed}
+                />
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">{nameField}</div>
                 <Field label="Company">
@@ -515,22 +559,15 @@ export function ContactForm({
               onChange={(e) => handleFieldChange("notes", e.target.value)}
             />
           </Field>
-          {form.photo_url && (
-            <div className="flex items-center gap-3 rounded-xl bg-brand-50 p-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={form.photo_url}
-                alt="LinkedIn profile"
-                className="h-10 w-10 rounded-xl object-cover"
-                referrerPolicy="no-referrer"
-                onError={() => importedPhotoFailed(form.photo_url)}
-              />
-              <div>
-                <p className="text-xs font-medium text-brand-900">Profile photo</p>
-                <p className="text-xs text-zinc-500">Pulled from the LinkedIn URL.</p>
-              </div>
-            </div>
-          )}
+          <ContactPhotoControl
+            photoUrl={form.photo_url}
+            pending={pending || photoUpload.pending || saveStatusUnknown}
+            error={photoUpload.error}
+            onFile={photoUpload.upload}
+            onRemove={photoUpload.remove}
+            onImageError={importedPhotoFailed}
+          />
+          {hasUnavatarPhoto && form.photo_url && <UnavatarAttribution />}
         </div>
       )}
 
@@ -546,6 +583,7 @@ export function ContactForm({
             <Button
               type="button"
               variant="ghost"
+              disabled={pending || saveStatusUnknown}
               onClick={() => {
                 setError(null);
                 setStep(1);
@@ -559,8 +597,10 @@ export function ContactForm({
           <Button
             type="button"
             variant="secondary"
+            disabled={pending}
             onClick={() => {
               cancelImport();
+              photoUpload.discard();
               onDone();
             }}
           >
@@ -572,11 +612,24 @@ export function ContactForm({
               mid-click, which used to fire a phantom submit that saved a
               half-filled contact. */}
           {step === 1 ? (
-            <Button key="next" type="submit" disabled={parsePending}>
+            <Button
+              key="next"
+              type="submit"
+              disabled={parsePending || photoUpload.pending}
+            >
               Next <ArrowRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button key="save" type="submit" disabled={pending || parsePending}>
+            <Button
+              key="save"
+              type="submit"
+              disabled={
+                pending ||
+                parsePending ||
+                photoUpload.pending ||
+                saveStatusUnknown
+              }
+            >
               {pending ? <Spinner /> : isEdit ? "Save changes" : "Add contact"}
             </Button>
           )}

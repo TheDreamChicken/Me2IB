@@ -10,6 +10,10 @@ import {
 const PROFILE = "https://www.linkedin.com/in/example-person-123";
 const PERSON_PHOTO =
   "https://media.licdn.com/dms/image/v2/D4E03AQ/example/profile-displayphoto-shrink_200_200/example?e=1770000000&v=beta";
+const OG_PHOTO =
+  "https://media.licdn.com/dms/image/v2/D4E03AQ/example/profile-displayphoto-shrink_400_400/og";
+const TWITTER_PHOTO =
+  "https://media-exp1.licdn.com/dms/image/v2/D4E03AQ/example/profile-displayphoto-shrink_200_200/twitter";
 
 function profileHtml() {
   const graph = {
@@ -70,6 +74,41 @@ test("selects the richest exact-URL Person and ignores masked/unrelated records"
   assert.doesNotMatch(parsed.exactPersonSummary, /Wrong Person|Wrong Company/);
 });
 
+test("does not trust OG or Twitter photos without an exact canonical Person", () => {
+  const html = `<!doctype html><html><head>
+    <meta property="og:image" content="${OG_PHOTO}">
+    <meta name="twitter:image" content="${TWITTER_PHOTO}">
+    <script type="application/ld+json">${JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Person",
+      name: "Different Person",
+      url: "https://www.linkedin.com/in/different-person",
+    })}</script>
+  </head><body>Public profile preview</body></html>`;
+
+  const parsed = parseLinkedInProfile(html, PROFILE);
+
+  assert.equal(parsed.hasExactPerson, false);
+  assert.deepEqual(parsed.photoCandidates, []);
+});
+
+test("ranks the exact Person photo ahead of same-page metadata photos", () => {
+  const html = profileHtml().replace(
+    '<meta property="og:image" content="https://media.licdn.com/dms/image/v2/company-logo_200_200/example">',
+    `<meta property="og:image" content="${OG_PHOTO}">
+     <meta name="twitter:image" content="${TWITTER_PHOTO}">`
+  );
+
+  const parsed = parseLinkedInProfile(html, PROFILE);
+
+  assert.equal(parsed.hasExactPerson, true);
+  assert.deepEqual(parsed.photoCandidates, [
+    PERSON_PHOTO,
+    OG_PHOTO,
+    TWITTER_PHOTO,
+  ]);
+});
+
 test("leaves a fully masked job title blank", () => {
   const html = profileHtml().replace(
     '"Senior Analyst","Former Analyst"',
@@ -88,6 +127,24 @@ test("does not fall through from a masked current company to a former company", 
   assert.equal(parsed.fields.company, undefined);
 });
 
+test("rejects partially masked structured identity and contact fields", () => {
+  const html = profileHtml()
+    .replaceAll('"name":"Example Person"', '"name":"J*** D***"')
+    .replace('"name":"Example &amp; Company"', '"name":"F****** C******"')
+    .replace('"Senior Analyst"', '"A******"')
+    .replace(
+      '"image":{',
+      '"email":"j***@example.com","telephone":"(***) ***-1234","image":{'
+    );
+  const parsed = parseLinkedInProfile(html, PROFILE);
+
+  assert.equal(parsed.fields.name, undefined);
+  assert.equal(parsed.fields.company, undefined);
+  assert.equal(parsed.fields.position, undefined);
+  assert.equal(parsed.fields.email, undefined);
+  assert.equal(parsed.fields.phone, undefined);
+});
+
 test("recognizes an authwall or throttled response without treating it as a profile", () => {
   const html =
     '<html><head><title>Sign Up | LinkedIn</title></head><body class="seo-authwall-base">Join LinkedIn</body></html>';
@@ -98,6 +155,31 @@ test("recognizes an authwall or throttled response without treating it as a prof
   assert.equal(blocked.access, "blocked");
   assert.deepEqual(authwall.fields, { linkedin_url: PROFILE });
   assert.deepEqual(authwall.photoCandidates, []);
+
+  const throttledWithStalePerson = parseLinkedInProfile(
+    profileHtml(),
+    PROFILE,
+    999
+  );
+  assert.equal(throttledWithStalePerson.access, "blocked");
+  assert.deepEqual(throttledWithStalePerson.fields, { linkedin_url: PROFILE });
+  assert.equal(throttledWithStalePerson.exactPersonSummary, "");
+  assert.deepEqual(throttledWithStalePerson.photoCandidates, []);
+  assert.equal(throttledWithStalePerson.hasExactPerson, false);
+
+  const exactPersonAuthwall = parseLinkedInProfile(
+    profileHtml()
+      .replace("<main>", '<main class="seo-authwall-base">')
+      .replace(
+        "<meta content=\"Example Person - Example Company | LinkedIn\" property=\"og:title\">",
+        '<meta content="Sign Up | LinkedIn" property="og:title">'
+      ),
+    PROFILE,
+    200
+  );
+  assert.equal(exactPersonAuthwall.access, "authwall");
+  assert.deepEqual(exactPersonAuthwall.fields, { linkedin_url: PROFILE });
+  assert.deepEqual(exactPersonAuthwall.photoCandidates, []);
 });
 
 test("canonicalizes only strict public LinkedIn profile URLs", () => {
@@ -108,6 +190,12 @@ test("canonicalizes only strict public LinkedIn profile URLs", () => {
   assert.equal(
     normalizeLinkedInProfileUrl(
       "https://uk.linkedin.com/in/example-person-123/?trk=public_profile"
+    )?.toString(),
+    PROFILE
+  );
+  assert.equal(
+    normalizeLinkedInProfileUrl(
+      "https://www.linkedin.com/in/Example-Person-123/"
     )?.toString(),
     PROFILE
   );
