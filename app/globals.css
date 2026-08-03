@@ -29,7 +29,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-libre-franklin);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -54,7 +54,7 @@ body {
   background-position: top, top, top;
   background-repeat: no-repeat;
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-libre-franklin), "Helvetica Neue", Arial, sans-serif;
 }
 
 /* ================================================================

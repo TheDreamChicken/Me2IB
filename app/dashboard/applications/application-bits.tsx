@@ -3,33 +3,38 @@
 import { CalendarClock } from "lucide-react";
 import type { Application } from "@/lib/types";
 import {
-  APPLICATION_STATUSES,
+  APPLICATION_PROGRESS_STAGES,
   PRIORITIES,
+  applicationProgressFor,
   companyLogoUrl,
   labelFor,
   statusColor,
 } from "@/lib/constants";
 import { Badge, cn } from "@/components/ui";
 import { daysUntilLocal, useNow } from "@/components/use-today";
+import { normalizeApplicationOutcome } from "./application-outcome";
 
 /* ------------------------------------------------------------------ */
 /* Status helpers                                                      */
 /* ------------------------------------------------------------------ */
 
-/** The forward-moving pipeline: not_started → offer (terminal states excluded). */
-export const STATUS_PIPELINE = APPLICATION_STATUSES.slice(0, 8);
+/** The forward-moving recruiting pipeline, separate from the final outcome. */
+export const STATUS_PIPELINE = APPLICATION_PROGRESS_STAGES;
+
+/** Keep legacy terminal rows usable without discarding their old decisions. */
+export function normalizeProgressStatus(status: string): string {
+  return applicationProgressFor(status);
+}
 
 export function statusIndex(status: string): number {
-  return APPLICATION_STATUSES.findIndex((s) => s.value === status);
+  return STATUS_PIPELINE.findIndex(
+    (stage) => stage.value === normalizeProgressStatus(status)
+  );
 }
 
 /** Submitted or further along (past in_progress). */
 export function isSubmitted(app: Application): boolean {
   return statusIndex(app.status) >= 2;
-}
-
-export function isTerminal(status: string): boolean {
-  return ["rejected", "waitlisted", "withdrawn"].includes(status);
 }
 
 /* ------------------------------------------------------------------ */
@@ -64,7 +69,12 @@ export function daysUntil(
 /** Red-alert deadline: within 7 days (or past) and not submitted yet. */
 export function deadlineUrgent(app: Application, now: Date | null): boolean {
   const days = daysUntil(app.deadline, now);
-  return days !== null && days <= 7 && !isSubmitted(app);
+  return (
+    normalizeApplicationOutcome(app.outcome, app.status) === "waiting" &&
+    days !== null &&
+    days <= 7 &&
+    !isSubmitted(app)
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -72,9 +82,10 @@ export function deadlineUrgent(app: Application, now: Date | null): boolean {
 /* ------------------------------------------------------------------ */
 
 export function StatusBadge({ status }: { status: string }) {
+  const progress = normalizeProgressStatus(status);
   return (
-    <Badge className={statusColor(status)}>
-      {labelFor(APPLICATION_STATUSES, status)}
+    <Badge className={statusColor(progress)}>
+      {labelFor(STATUS_PIPELINE, progress)}
     </Badge>
   );
 }

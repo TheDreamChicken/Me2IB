@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import type { Application, Contact } from "@/lib/types";
 import {
-  APPLICATION_STATUSES,
+  APPLICATION_PROGRESS_STAGES,
   INDUSTRIES,
   MATERIAL_STATUSES,
   PRIORITIES,
@@ -21,7 +21,14 @@ import {
   Spinner,
   Textarea,
   cn,
+  useModalScrollTop,
 } from "@/components/ui";
+import { normalizeProgressStatus } from "./application-bits";
+import {
+  normalizeApplicationOutcome,
+  OutcomePicker,
+  type ApplicationOutcome,
+} from "./application-outcome";
 
 const WORK_TYPES = [
   { value: "in-person", label: "In-person" },
@@ -73,6 +80,7 @@ type FormValues = {
   hours_per_week: string;
   pay: string;
   status: string;
+  outcome: ApplicationOutcome;
   deadline: string;
   date_applied: string;
   resume_status: string;
@@ -104,7 +112,8 @@ function initialValues(app: Application | null): FormValues {
     employment_type: app?.employment_type ?? "internship",
     hours_per_week: app?.hours_per_week ?? "",
     pay: app?.pay ?? "",
-    status: app?.status ?? "not_started",
+    status: app ? normalizeProgressStatus(app.status) : "not_started",
+    outcome: normalizeApplicationOutcome(app?.outcome, app?.status),
     deadline: app?.deadline ?? "",
     date_applied: app?.date_applied ?? "",
     resume_status: app?.resume_status ?? "not_started",
@@ -323,6 +332,7 @@ export function ApplicationForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const scrollModalToTop = useModalScrollTop();
 
   const sectorOptions = SECTORS[values.industry];
   const tierOptions = TIERS[values.industry];
@@ -330,6 +340,11 @@ export function ApplicationForm({
 
   function set<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
+  }
+
+  function resetStepScroll() {
+    scrollModalToTop();
+    requestAnimationFrame(scrollModalToTop);
   }
 
   /** Industry drives sector/tier options — drop values that no longer fit. */
@@ -396,12 +411,24 @@ export function ApplicationForm({
 
   function goTo(target: number) {
     if (target > 0 && !values.company.trim()) {
-      setStep(0);
+      if (step !== 0) {
+        setStep(0);
+        resetStepScroll();
+      }
       setError("Add the company name first — it's the only must-have.");
       return;
     }
     setError(null);
-    setStep(Math.max(0, Math.min(STEPS.length - 1, target)));
+    const nextStep = Math.max(0, Math.min(STEPS.length - 1, target));
+    if (nextStep !== step) {
+      setStep(nextStep);
+      resetStepScroll();
+    }
+  }
+
+  function finish() {
+    scrollModalToTop();
+    onDone();
   }
 
   /** One FormData at the very end — field names match upsertApplication. */
@@ -431,7 +458,7 @@ export function ApplicationForm({
     startTransition(async () => {
       const res = await upsertApplication(buildFormData());
       if (res.error) setError(res.error);
-      else onDone();
+      else finish();
     });
   }
 
@@ -601,14 +628,14 @@ export function ApplicationForm({
       {/* ---- Step 3: Where you're at ---- */}
       {step === 2 && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Status">
+          <Field label="Progress">
             <Select
               name="status"
               value={values.status}
               onChange={(e) => set("status", e.target.value)}
               autoFocus
             >
-              {APPLICATION_STATUSES.map((s) => (
+              {APPLICATION_PROGRESS_STAGES.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
@@ -631,6 +658,19 @@ export function ApplicationForm({
               onChange={(e) => set("date_applied", e.target.value)}
             />
           </Field>
+          <div className="sm:col-span-2">
+            <p className="mb-1 text-xs font-medium text-brand-900/70">
+              Outcome
+            </p>
+            <OutcomePicker
+              value={values.outcome}
+              onChange={(outcome) => set("outcome", outcome)}
+              disabled={pending}
+            />
+            <p className="mt-1 text-xs text-zinc-400">
+              Keep the decision separate from how far you got.
+            </p>
+          </div>
           <Field label="Resume status">
             <Select
               name="resume_status"
@@ -775,7 +815,7 @@ export function ApplicationForm({
 
       <div className="flex items-center justify-between gap-2 border-t border-brand-100 pt-4">
         {step === 0 ? (
-          <Button type="button" variant="ghost" onClick={onDone}>
+          <Button type="button" variant="ghost" onClick={finish}>
             Cancel
           </Button>
         ) : (

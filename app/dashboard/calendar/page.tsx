@@ -19,7 +19,10 @@ export default async function CalendarPage() {
       .order("name", { ascending: true }),
     supabase
       .from("applications")
-      .select("id, company, position, status, deadline, next_step, next_step_date")
+      // Keep the calendar readable during the brief deploy-before-migration
+      // window; ApplicationLite narrows this and its outcome helper supports
+      // legacy rows where the new column is not present yet.
+      .select("*")
       .order("company", { ascending: true }),
   ]);
 

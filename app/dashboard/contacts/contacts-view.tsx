@@ -5,6 +5,7 @@ import Markdown from "react-markdown";
 import {
   AlarmClock,
   Building2,
+  CalendarDays,
   CheckCircle2,
   GraduationCap,
   Heart,
@@ -45,6 +46,7 @@ import {
   Spinner,
   StatCard,
   cn,
+  useModalScrollTop,
 } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
@@ -142,6 +144,40 @@ function TouchBadge({ contact, now }: { contact: Contact; now: Date | null }) {
       <CheckCircle2 className="h-3 w-3" />
       In touch
     </Badge>
+  );
+}
+
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+function LastContactedDate({ contact }: { contact: Contact }) {
+  const [year, month, day] = (contact.last_contacted ?? "").split("-");
+  const monthLabel = SHORT_MONTHS[Number(month) - 1];
+  const label =
+    year && monthLabel && day
+      ? `${monthLabel} ${Number(day)}, ${year}`
+      : "No date yet";
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] text-zinc-400"
+      title={`Last contacted: ${label}`}
+    >
+      <CalendarDays className="h-3 w-3" />
+      Last: {label}
+    </span>
   );
 }
 
@@ -261,6 +297,7 @@ function ContactDetail({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const scrollModalToTop = useModalScrollTop();
   const logo = companyLogoUrl(contact.company);
 
   const infoRows: { icon: React.ElementType; label: string; value: string | null }[] = [
@@ -400,7 +437,14 @@ function ContactDetail({
             });
           }}
         />
-        <Button onClick={onEdit}>Edit contact</Button>
+        <Button
+          onClick={() => {
+            scrollModalToTop();
+            onEdit();
+          }}
+        >
+          Edit contact
+        </Button>
       </div>
     </div>
   );
@@ -576,6 +620,7 @@ export function ContactsView({
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <StrengthDots value={c.connection_strength} />
                       <TouchBadge contact={c} now={now} />
+                      <LastContactedDate contact={c} />
                     </div>
                   </div>
                 </div>
@@ -600,6 +645,7 @@ export function ContactsView({
         {adding && (
           <ContactForm
             contact={null}
+            profile={profile}
             userId={userId}
             onDone={() => setAdding(false)}
           />
@@ -616,11 +662,15 @@ export function ContactsView({
         }}
         title={editing ? "Edit contact" : ""}
         wide={!editing}
+        scrollKey={
+          editing ? `edit:${editing.id}` : `detail:${selected?.id ?? ""}`
+        }
       >
         {editing ? (
           <ContactForm
             key={editing.id}
             contact={editing}
+            profile={profile}
             userId={userId}
             onDone={() => setEditing(null)}
           />

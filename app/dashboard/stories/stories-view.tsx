@@ -56,6 +56,10 @@ function strengthLabel(value: string): string {
   return STORY_STRENGTHS.find((s) => s.value === value)?.label ?? value;
 }
 
+const STARRED_CLASSIC_QUESTION_TEXT = new Set(
+  STARRED_CLASSICS.map((question) => question.question)
+);
+
 /* ------------------------------------------------------------------ */
 /* Small pieces                                                        */
 /* ------------------------------------------------------------------ */
@@ -269,15 +273,32 @@ function ClassicsLibrary({ stories }: { stories: Story[] }) {
 }
 
 function StoryCard({ story, onClick }: { story: Story; onClick: () => void }) {
+  const isStarredClassic = STARRED_CLASSIC_QUESTION_TEXT.has(story.question);
+
   return (
     <Card
       className={cn("p-4", !story.answer && "border-dashed")}
       onClick={onClick}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold leading-snug text-brand-900">
-          {story.question}
-        </p>
+        <div className="flex min-w-0 items-start gap-1.5">
+          {isStarredClassic && (
+            <span
+              className="mt-0.5 shrink-0"
+              title="Classic question — asked in almost every interview"
+              aria-label="Classic question — asked in almost every interview"
+              role="img"
+            >
+              <Star
+                aria-hidden
+                className="h-3.5 w-3.5 fill-amber-400 text-amber-400"
+              />
+            </span>
+          )}
+          <p className="text-sm font-semibold leading-snug text-brand-900">
+            {story.question}
+          </p>
+        </div>
         <Badge className={strengthBadge(story.strength)}>
           {strengthLabel(story.strength)}
         </Badge>
@@ -763,6 +784,9 @@ export function StoriesView({ stories }: { stories: Story[] }) {
         }}
         title={editing ? "Edit story" : ""}
         wide
+        scrollKey={
+          editing ? `edit:${editing.id}` : `detail:${selected?.id ?? ""}`
+        }
       >
         {editing ? (
           <StoryForm story={editing} onDone={() => setEditing(null)} />

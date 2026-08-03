@@ -3,6 +3,7 @@
 import { useEffect, useReducer, useRef, useState, useTransition } from "react";
 import { callAI } from "@/lib/ai-client";
 import { INDUSTRIES } from "@/lib/constants";
+import type { Profile } from "@/lib/types";
 import {
   hasMeaningfulFields,
   importFormReducer,
@@ -60,7 +61,28 @@ function appendNotice(base: string | null, addition: string): string {
   return [base, addition].filter(Boolean).join(" ");
 }
 
-export function useLinkedInImport(initialForm: FormState) {
+function profileComparisonContext(profile: Profile | null) {
+  if (!profile) return null;
+
+  return {
+    school: profile.school,
+    fieldsOfStudy:
+      profile.majors?.length || profile.minors?.length
+        ? [...(profile.majors ?? []), ...(profile.minors ?? [])]
+        : [profile.major, profile.minor].filter(Boolean),
+    city: profile.city,
+    targetIndustries: profile.target_industries,
+    clubsAndActivities: profile.clubs,
+    professionalSummary: profile.professional_summary,
+    personalInterests: profile.personal_interests,
+    funFacts: profile.fun_facts,
+  };
+}
+
+export function useLinkedInImport(
+  initialForm: FormState,
+  profile: Profile | null
+) {
   const [state, dispatch] = useReducer(importFormReducer, {
     activeImportId: 0,
     form: initialForm,
@@ -195,6 +217,7 @@ export function useLinkedInImport(initialForm: FormState) {
         const result = await callAI<ParsedContact>("parse_contact", {
           url: linkedinUrl,
           text: pulled.profileText ?? "",
+          profile: profileComparisonContext(profile),
         });
         if (!isCurrent()) return;
 

@@ -532,6 +532,9 @@ export function DocumentsView({ documents }: { documents: Document[] }) {
         }}
         title={editing ? "Edit document" : ""}
         wide
+        scrollKey={
+          editing ? `edit:${editing.id}` : `detail:${selected?.id ?? ""}`
+        }
       >
         {editing ? (
           <DocumentForm doc={editing} onDone={() => setEditing(null)} />

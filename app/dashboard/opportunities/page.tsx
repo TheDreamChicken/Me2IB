@@ -12,7 +12,10 @@ export default async function OpportunitiesPage() {
       .from("opportunities")
       .select("*")
       .order("created_at", { ascending: false }),
-    supabase.from("profiles").select("target_industries").maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("target_industries, grad_year")
+      .maybeSingle(),
   ]);
 
   if (error) {
@@ -23,6 +26,7 @@ export default async function OpportunitiesPage() {
     <OpportunitiesView
       opportunities={(data ?? []) as Opportunity[]}
       targetIndustries={profile?.target_industries ?? []}
+      defaultGraduationYear={profile?.grad_year ?? null}
     />
   );
 }

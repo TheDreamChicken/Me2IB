@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import type { Application, Contact } from "@/lib/types";
 import {
-  APPLICATION_STATUSES,
+  APPLICATION_OUTCOMES,
+  APPLICATION_PROGRESS_STAGES,
   INDUSTRIES,
   PRIORITIES,
   TIERS,
@@ -34,7 +35,12 @@ import {
   DeadlineChip,
   PriorityBadge,
   StatusBadge,
+  normalizeProgressStatus,
 } from "./application-bits";
+import {
+  normalizeApplicationOutcome,
+  OutcomeBadge,
+} from "./application-outcome";
 import { ApplicationForm } from "./application-form";
 import { ApplicationDetail } from "./application-detail";
 
@@ -42,6 +48,7 @@ const INTERVIEW_STATUSES = [
   "online_assessment",
   "phone_screen",
   "first_round",
+  "interview_stage",
   "superday",
 ];
 
@@ -58,6 +65,7 @@ function ApplicationRow({
   app: Application;
   onClick: () => void;
 }) {
+  const outcome = normalizeApplicationOutcome(app.outcome, app.status);
   return (
     <Card className="p-4" onClick={onClick}>
       <div className="flex items-start gap-3">
@@ -71,6 +79,7 @@ function ApplicationRow({
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <StatusBadge status={app.status} />
+            <OutcomeBadge outcome={outcome} />
             <PriorityBadge priority={app.priority} />
             {app.sector && (
               <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-600 whitespace-nowrap">
@@ -178,6 +187,7 @@ export function ApplicationsView({
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [outcomeFilter, setOutcomeFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
   const [seasonFilter, setSeasonFilter] = useState("");
@@ -191,7 +201,17 @@ export function ApplicationsView({
 
   const filtered = useMemo(() => {
     let list = applications;
-    if (statusFilter) list = list.filter((a) => a.status === statusFilter);
+    if (statusFilter) {
+      list = list.filter(
+        (a) => normalizeProgressStatus(a.status) === statusFilter
+      );
+    }
+    if (outcomeFilter) {
+      list = list.filter(
+        (a) =>
+          normalizeApplicationOutcome(a.outcome, a.status) === outcomeFilter
+      );
+    }
     if (priorityFilter)
       list = list.filter((a) => a.priority === priorityFilter);
     if (industryFilter)
@@ -228,6 +248,7 @@ export function ApplicationsView({
     applications,
     query,
     statusFilter,
+    outcomeFilter,
     priorityFilter,
     industryFilter,
     seasonFilter,
@@ -237,12 +258,16 @@ export function ApplicationsView({
   const groups = useMemo(() => buildGroups(filtered), [filtered]);
 
   const activeCount = applications.filter(
-    (a) => a.status !== "rejected" && a.status !== "withdrawn"
+    (a) => normalizeApplicationOutcome(a.outcome, a.status) === "waiting"
   ).length;
-  const interviewCount = applications.filter((a) =>
-    INTERVIEW_STATUSES.includes(a.status)
+  const interviewCount = applications.filter(
+    (a) =>
+      normalizeApplicationOutcome(a.outcome, a.status) === "waiting" &&
+      INTERVIEW_STATUSES.includes(normalizeProgressStatus(a.status))
   ).length;
-  const offerCount = applications.filter((a) => a.status === "offer").length;
+  const acceptedCount = applications.filter(
+    (a) => normalizeApplicationOutcome(a.outcome, a.status) === "accepted"
+  ).length;
 
   return (
     <div>
@@ -265,19 +290,19 @@ export function ApplicationsView({
         <StatCard
           label="Active"
           value={activeCount}
-          sub="Not rejected or withdrawn"
+          sub="Waiting to hear back"
           icon={<Flame className="h-5 w-5" />}
         />
         <StatCard
           label="In interviews"
           value={interviewCount}
-          sub="OA through superday"
+          sub="OA through final rounds"
           icon={<Mic className="h-5 w-5" />}
         />
         <StatCard
-          label="Offers"
-          value={offerCount}
-          sub={offerCount ? "Let's go! 🎉" : "They're coming."}
+          label="Accepted"
+          value={acceptedCount}
+          sub={acceptedCount ? "Let's go! 🎉" : "They're coming."}
           icon={<Trophy className="h-5 w-5" />}
         />
       </div>
@@ -294,10 +319,22 @@ export function ApplicationsView({
           onChange={(e) => setStatusFilter(e.target.value)}
           className="w-auto"
         >
-          <option value="">All statuses</option>
-          {APPLICATION_STATUSES.map((s) => (
+          <option value="">All progress</option>
+          {APPLICATION_PROGRESS_STAGES.map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={outcomeFilter}
+          onChange={(e) => setOutcomeFilter(e.target.value)}
+          className="w-auto"
+        >
+          <option value="">All outcomes</option>
+          {APPLICATION_OUTCOMES.map((outcome) => (
+            <option key={outcome.value} value={outcome.value}>
+              {outcome.label}
             </option>
           ))}
         </Select>
@@ -431,6 +468,9 @@ export function ApplicationsView({
         }}
         title={editing ? "Edit application" : ""}
         wide={!editing}
+        scrollKey={
+          editing ? `edit:${editing.id}` : `detail:${selected?.id ?? ""}`
+        }
       >
         {editing ? (
           <ApplicationForm

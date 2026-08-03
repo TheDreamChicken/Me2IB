@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { ArrowLeft, ArrowRight, PenLine, Sparkles } from "lucide-react";
 import { LinkedInIcon } from "@/components/icons";
-import type { Contact } from "@/lib/types";
+import type { Contact, Profile } from "@/lib/types";
 import { CONNECTION_STRENGTHS, INDUSTRIES } from "@/lib/constants";
 import { upsertContact } from "@/lib/actions/contacts";
 import {
@@ -24,6 +24,7 @@ import {
   Spinner,
   Textarea,
   cn,
+  useModalScrollTop,
 } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
@@ -96,10 +97,12 @@ function StartOption({
 
 export function ContactForm({
   contact,
+  profile,
   userId,
   onDone,
 }: {
   contact: Contact | null;
+  profile: Profile | null;
   userId: string;
   onDone: () => void;
 }) {
@@ -109,6 +112,7 @@ export function ContactForm({
   const [error, setError] = useState<string | null>(null);
   const [saveStatusUnknown, setSaveStatusUnknown] = useState(false);
   const [pending, startTransition] = useTransition();
+  const scrollModalToTop = useModalScrollTop();
 
   const initialForm: FormState = {
     name: contact?.name ?? "",
@@ -143,7 +147,7 @@ export function ContactForm({
     parsePending,
     parseSetup,
     runParse,
-  } = useLinkedInImport(initialForm);
+  } = useLinkedInImport(initialForm, profile);
 
   const hasUnavatarPhoto = isUnavatarImportPhoto(form.photo_url);
   const photoUpload = useContactPhotoUpload({
@@ -164,6 +168,7 @@ export function ContactForm({
     }
     setError(null);
     setStep(2);
+    scrollModalToTop();
   }
 
   // Runs on form submit (including Enter). On step 1, Enter means "Next".
@@ -187,6 +192,7 @@ export function ContactForm({
           setError(res.error);
         } else {
           photoUpload.saveSucceeded();
+          scrollModalToTop();
           onDone();
         }
       } catch {
@@ -444,7 +450,7 @@ export function ContactForm({
             </div>
             <div className="sm:col-span-2">
               <Field
-                label="Relationship"
+                label="Brief description"
                 hint="One line on who they are / what they do."
               >
                 <Input
@@ -543,7 +549,7 @@ export function ContactForm({
           </div>
           <Field
             label="Shared interests"
-            hint="Common ground makes outreach 10x easier."
+            hint="LinkedIn import compares their public details with the interests and background in your Account profile."
           >
             <Textarea
               value={form.shared_interests}
@@ -587,6 +593,7 @@ export function ContactForm({
               onClick={() => {
                 setError(null);
                 setStep(1);
+                scrollModalToTop();
               }}
             >
               <ArrowLeft className="h-4 w-4" /> Back
@@ -601,6 +608,7 @@ export function ContactForm({
             onClick={() => {
               cancelImport();
               photoUpload.discard();
+              scrollModalToTop();
               onDone();
             }}
           >

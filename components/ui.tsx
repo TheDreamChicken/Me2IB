@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ChevronDown, Loader2, Search, X } from "lucide-react";
 
 export function cn(...parts: (string | false | null | undefined)[]) {
@@ -284,21 +291,46 @@ export function Spinner({ className }: { className?: string }) {
 /* Modal                                                               */
 /* ------------------------------------------------------------------ */
 
+const ModalScrollContext = createContext<(() => void) | null>(null);
+
+/** Scroll the nearest Modal body to its beginning after swapping steps/views. */
+export function useModalScrollTop() {
+  const scrollToTop = useContext(ModalScrollContext);
+  return useCallback(() => scrollToTop?.(), [scrollToTop]);
+}
+
 export function Modal({
   open,
   onClose,
   title,
   children,
   wide,
+  scrollKey,
 }: {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
   wide?: boolean;
+  /** Change when a persistent modal swaps to another internal view. */
+  scrollKey?: React.Key | null;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const openedAtRef = useRef(0);
+  const scrollToTop = useCallback(() => {
+    const scroll = () =>
+      scrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    scroll();
+    // Step swaps often mount an autofocus field. Run once more after React
+    // commits so that focus restoration cannot pull a long form back down.
+    window.requestAnimationFrame(scroll);
+  }, []);
+
+  const close = useCallback(() => {
+    scrollToTop();
+    onClose();
+  }, [onClose, scrollToTop]);
 
   // Stamped only on the open transition — the other effect re-runs whenever
   // the parent re-renders (inline onClose identity), which must not re-arm
@@ -308,9 +340,13 @@ export function Modal({
   }, [open]);
 
   useEffect(() => {
+    if (open) scrollToTop();
+  }, [open, scrollKey, scrollToTop]);
+
+  useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close();
     };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -318,7 +354,7 @@ export function Modal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+  }, [close, open]);
 
   if (!open) return null;
 
@@ -330,7 +366,7 @@ export function Modal({
         // this modal must not count as an outside click and instantly close it.
         if (Date.now() - openedAtRef.current < 250) return;
         if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-          onClose();
+          close();
         }
       }}
     >
@@ -346,7 +382,7 @@ export function Modal({
             <h2 className="text-lg font-semibold text-brand-900">{title}</h2>
           )}
           <button
-            onClick={onClose}
+            onClick={close}
             className="ml-auto rounded-lg p-1 text-zinc-400 transition-colors hover:bg-brand-50 hover:text-brand-700 cursor-pointer"
             aria-label="Close"
           >
@@ -354,9 +390,14 @@ export function Modal({
           </button>
         </div>
         {/* Internal scroll so long forms never cut off the viewport */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-2">
-          {children}
-        </div>
+        <ModalScrollContext.Provider value={scrollToTop}>
+          <div
+            ref={scrollRef}
+            className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-2"
+          >
+            {children}
+          </div>
+        </ModalScrollContext.Provider>
       </div>
     </div>
   );

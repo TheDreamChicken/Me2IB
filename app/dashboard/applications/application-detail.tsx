@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarClock,
   CalendarDays,
+  CheckCircle2,
   Clock,
   ExternalLink,
   FileText,
@@ -21,15 +22,23 @@ import type { Application, Contact } from "@/lib/types";
 import {
   INDUSTRIES,
   MATERIAL_STATUSES,
-  APPLICATION_STATUSES,
+  APPLICATION_PROGRESS_STAGES,
   TIERS,
   labelFor,
 } from "@/lib/constants";
 import {
   deleteApplication,
+  setApplicationOutcome,
   setApplicationStatus,
 } from "@/lib/actions/applications";
-import { Badge, Button, Select, Spinner, cn } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Select,
+  Spinner,
+  cn,
+  useModalScrollTop,
+} from "@/components/ui";
 import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
 import { useNow } from "@/components/use-today";
 import {
@@ -39,9 +48,15 @@ import {
   StatusBadge,
   deadlineUrgent,
   formatDate,
-  isTerminal,
   materialColor,
+  normalizeProgressStatus,
 } from "./application-bits";
+import {
+  normalizeApplicationOutcome,
+  OutcomeBadge,
+  OutcomePicker,
+  type ApplicationOutcome,
+} from "./application-outcome";
 
 function Section({
   icon: Icon,
@@ -103,15 +118,15 @@ function NoteBlock({ label, value }: { label: string; value: string }) {
 /* ------------------------------------------------------------------ */
 
 function StatusPipeline({ app }: { app: Application }) {
-  const currentIdx = STATUS_PIPELINE.findIndex((s) => s.value === app.status);
-  const terminal = isTerminal(app.status);
+  const progress = normalizeProgressStatus(app.status);
+  const currentIdx = STATUS_PIPELINE.findIndex((s) => s.value === progress);
 
   return (
-    <div>
-      <div className="flex items-start overflow-x-auto pb-1">
+    <div className="pt-1">
+      <div className="flex items-start overflow-x-auto px-1 pb-1 pt-1.5">
         {STATUS_PIPELINE.map((s, i) => {
-          const done = currentIdx >= 0 && i < currentIdx && !terminal;
-          const current = i === currentIdx && !terminal;
+          const done = currentIdx >= 0 && i < currentIdx;
+          const current = i === currentIdx;
           return (
             <div
               key={s.value}
@@ -165,12 +180,6 @@ function StatusPipeline({ app }: { app: Application }) {
           );
         })}
       </div>
-      {terminal && (
-        <p className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
-          <StatusBadge status={app.status} />
-          This one left the pipeline — you can always move it back below.
-        </p>
-      )}
     </div>
   );
 }
@@ -193,12 +202,15 @@ export function ApplicationDetail({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const now = useNow();
+  const scrollModalToTop = useModalScrollTop();
 
   const referral = app.referral_contact_id
     ? (contacts.find((c) => c.id === app.referral_contact_id) ?? null)
     : null;
 
-  const currentIdx = STATUS_PIPELINE.findIndex((s) => s.value === app.status);
+  const progress = normalizeProgressStatus(app.status);
+  const outcome = normalizeApplicationOutcome(app.outcome, app.status);
+  const currentIdx = STATUS_PIPELINE.findIndex((s) => s.value === progress);
   const nextStatus =
     currentIdx >= 0 && currentIdx < STATUS_PIPELINE.length - 1
       ? STATUS_PIPELINE[currentIdx + 1]
@@ -208,6 +220,14 @@ export function ApplicationDetail({
     setError(null);
     startTransition(async () => {
       const res = await setApplicationStatus(app.id, status);
+      if (res.error) setError(res.error);
+    });
+  }
+
+  function changeOutcome(nextOutcome: ApplicationOutcome) {
+    setError(null);
+    startTransition(async () => {
+      const res = await setApplicationOutcome(app.id, nextOutcome);
       if (res.error) setError(res.error);
     });
   }
@@ -230,6 +250,7 @@ export function ApplicationDetail({
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <StatusBadge status={app.status} />
+            <OutcomeBadge outcome={outcome} />
             <PriorityBadge priority={app.priority} />
             <Badge>{labelFor(INDUSTRIES, app.industry)}</Badge>
             {app.sector && (
@@ -358,18 +379,33 @@ export function ApplicationDetail({
               </Button>
             )}
             <Select
-              value={app.status}
+              value={progress}
               disabled={pending}
               onChange={(e) => changeStatus(e.target.value)}
               className="w-auto [&_select]:text-xs"
             >
-              {APPLICATION_STATUSES.map((s) => (
+              {APPLICATION_PROGRESS_STAGES.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
               ))}
             </Select>
           </div>
+        </div>
+      </Section>
+
+      {/* Outcome */}
+      <Section icon={CheckCircle2} title="Outcome">
+        <div className="rounded-2xl border border-brand-100 bg-white p-3">
+          <OutcomePicker
+            value={outcome}
+            onChange={changeOutcome}
+            disabled={pending}
+          />
+          <p className="mt-2 px-1 text-xs text-zinc-400">
+            The decision stays separate from the last recruiting stage you
+            reached.
+          </p>
         </div>
       </Section>
 
@@ -472,7 +508,14 @@ export function ApplicationDetail({
             });
           }}
         />
-        <Button onClick={onEdit}>Edit application</Button>
+        <Button
+          onClick={() => {
+            scrollModalToTop();
+            onEdit();
+          }}
+        >
+          Edit application
+        </Button>
       </div>
     </div>
   );

@@ -404,6 +404,13 @@ export function CalendarView({
                 })
               : ""
         }
+        scrollKey={
+          editing
+            ? `edit:${editing.id}`
+            : selected
+              ? `detail:${selected.id}`
+              : `day:${dayKey ?? ""}`
+        }
       >
         {editing ? (
           <EventForm

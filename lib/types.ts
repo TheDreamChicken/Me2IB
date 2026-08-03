@@ -70,6 +70,7 @@ export type Application = {
   hours_per_week: string | null;
   pay: string | null;
   status: string;
+  outcome: string;
   priority: string;
   deadline: string | null;
   date_applied: string | null;

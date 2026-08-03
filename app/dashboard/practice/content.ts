@@ -503,6 +503,42 @@ const BEHAVIORAL_ITEMS: PracticeItem[] = [
     ],
   },
   {
+    question: '"Do you have any questions for me?" — how to ask good ones.',
+    answer: [
+      {
+        type: "p",
+        text: "Treat the last few minutes as part of the interview, not an afterthought. Bring four to six options, ask the best two or three for the person in front of you, and listen closely enough to ask a natural follow-up. The strongest questions invite a real perspective — not a fact you could have found on the firm's website.",
+      },
+      {
+        type: "list",
+        items: [
+          "**Level 1 — their work and perspective:** usually the most personal place to start. Try: \"I saw that you moved from [team/industry] into [current area]. What surprised you most about that transition?\" or \"What part of your work has been most interesting lately, and why?\"",
+          "**Level 2 — the role and team:** learn what the job is actually like. Try: \"What separates the analysts who become trusted quickly from the ones who take longer?\" or \"What does meaningful ownership look like for a first-year on your team?\"",
+          "**Level 3 — firm culture in practice:** ask for evidence, not a slogan. Try: \"Can you share a recent moment when the firm's culture changed how the team handled a difficult situation?\" or \"How does feedback work here when a project gets intense?\"",
+          "**Level 4 — the industry and firm's direction:** best when you have done enough research to be specific. Try: \"How has [a real market, regulatory, or technology shift] changed what clients ask your team for?\" or \"Where do you think this group has the most room to grow over the next few years?\"",
+        ],
+      },
+      {
+        type: "reveal",
+        label: "Turn your research into a personalized question",
+        blocks: [
+          {
+            type: "steps",
+            items: [
+              "Find one real detail about the **person** (their path, team, sector, deal, case, publication, or alumni connection) or the **firm** (a recent initiative, transaction, office expansion, or strategic priority).",
+              "Connect it to something you genuinely want to understand: \"I noticed **[specific detail]**. How has that shaped **[their work, the junior experience, or the firm's direction]**?\"",
+              "Use the conversation itself. \"You mentioned earlier that the team is taking on more cross-border work — how has that changed what junior team members get to own?\" will nearly always land better than reading the next question on a memorized list.",
+            ],
+          },
+          {
+            type: "p",
+            text: "Keep each question to one clean thought. Avoid questions answered by a quick search, forced attempts to sound technical, and early-round questions focused only on pay, vacation, or how soon you can move up. Curiosity beats performance — ask what you actually care about, then have a conversation.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     question: "Delivery tips — how the best answers sound.",
     answer: [
       {

@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Libre_Franklin } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const libreFranklin = Libre_Franklin({
+  variable: "--font-libre-franklin",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -31,7 +33,7 @@ export default function RootLayout({
       lang="en"
       // No h-full here: html must wrap the full document so the body's
       // page-length background gradient (globals.css) spans the whole page.
-      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      className={`${libreFranklin.variable} ${geistMono.variable} antialiased`}
       // The theme script below stamps data-theme before hydration; React
       // shouldn't warn about that attribute differing from the server HTML.
       suppressHydrationWarning

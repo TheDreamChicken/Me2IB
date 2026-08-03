@@ -139,7 +139,8 @@ create table if not exists public.applications (
   season text,                       -- e.g. "Summer 2027"
   hours_per_week text,
   pay text,
-  status text default 'not_started', -- not_started | in_progress | submitted | online_assessment | phone_screen | first_round | superday | offer | rejected | withdrawn | waitlisted
+  status text default 'not_started', -- not_started | in_progress | submitted | online_assessment | phone_screen | first_round | interview_stage | superday (legacy terminal values remain supported)
+  outcome text not null default 'waiting', -- rejected | waiting | accepted
   priority text default 'target',    -- dream | target | safety
   deadline date,
   date_applied date,
@@ -159,6 +160,36 @@ create table if not exists public.applications (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Pause timestamping during the one-time outcome backfill so legacy rows keep
+-- their real "last edited" order. The trigger is recreated below.
+drop trigger if exists applications_updated_at on public.applications;
+
+-- Existing installations predate the separate outcome field. On the first
+-- schema re-run only, preserve old offer/rejection decisions while adding it.
+do $$
+begin
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'applications'
+      and column_name = 'outcome'
+  ) then
+    alter table public.applications add column outcome text;
+    update public.applications
+    set outcome = case
+      when status = 'offer' then 'accepted'
+      when status in ('rejected', 'withdrawn') then 'rejected'
+      else 'waiting'
+    end;
+  end if;
+end
+$$;
+
+update public.applications set outcome = 'waiting' where outcome is null;
+alter table public.applications alter column outcome set default 'waiting';
+alter table public.applications alter column outcome set not null;
 
 create index if not exists applications_user_idx on public.applications (user_id);
 

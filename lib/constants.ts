@@ -44,6 +44,7 @@ export const SECTORS: Record<string, string[]> = {
     "Restructuring",
     "ECM / DCM",
     "Leveraged Finance",
+    "Nonprofits",
     "Generalist",
   ],
   consulting: [
@@ -55,18 +56,59 @@ export const SECTORS: Record<string, string[]> = {
     "Financial Services",
     "Consumer",
     "Public Sector",
+    "Nonprofits",
     "Generalist",
   ],
 };
 
-export const APPLICATION_STATUSES = [
+export const APPLICATION_PROGRESS_STAGES = [
   { value: "not_started", label: "Not started", color: "bg-zinc-100 text-zinc-600" },
   { value: "in_progress", label: "In progress", color: "bg-amber-100 text-amber-700" },
   { value: "submitted", label: "Submitted", color: "bg-blue-100 text-blue-700" },
   { value: "online_assessment", label: "Online assessment", color: "bg-cyan-100 text-cyan-700" },
   { value: "phone_screen", label: "Phone screen", color: "bg-indigo-100 text-indigo-700" },
   { value: "first_round", label: "First round", color: "bg-violet-100 text-violet-700" },
+  { value: "interview_stage", label: "Interview stage", color: "bg-fuchsia-100 text-fuchsia-700" },
   { value: "superday", label: "Superday / Final", color: "bg-purple-100 text-purple-700" },
+] as const;
+
+export const APPLICATION_OUTCOMES = [
+  { value: "rejected", label: "Rejected", color: "bg-rose-100 text-rose-600" },
+  { value: "waiting", label: "Waiting to hear back", color: "bg-amber-100 text-amber-700" },
+  { value: "accepted", label: "Accepted", color: "bg-emerald-100 text-emerald-700" },
+] as const;
+
+export type ApplicationOutcomeValue =
+  (typeof APPLICATION_OUTCOMES)[number]["value"];
+
+/** Resolve rows created before applications had a separate outcome column. */
+export function applicationOutcomeFor(
+  outcome: string | null | undefined,
+  legacyStatus?: string | null
+): ApplicationOutcomeValue {
+  if (APPLICATION_OUTCOMES.some((item) => item.value === outcome)) {
+    return outcome as ApplicationOutcomeValue;
+  }
+  if (legacyStatus === "offer") return "accepted";
+  if (legacyStatus === "rejected" || legacyStatus === "withdrawn") {
+    return "rejected";
+  }
+  return "waiting";
+}
+
+/** Resolve legacy terminal statuses to a sensible last pipeline stage. */
+export function applicationProgressFor(status: string): string {
+  if (APPLICATION_PROGRESS_STAGES.some((stage) => stage.value === status)) {
+    return status;
+  }
+  if (status === "offer") return "superday";
+  return "submitted";
+}
+
+// Includes legacy terminal statuses so older rows still render clearly until
+// they are next edited. New application flows use progress + outcome instead.
+export const APPLICATION_STATUSES = [
+  ...APPLICATION_PROGRESS_STAGES,
   { value: "offer", label: "Offer 🎉", color: "bg-emerald-100 text-emerald-700" },
   { value: "rejected", label: "Rejected", color: "bg-rose-100 text-rose-600" },
   { value: "waitlisted", label: "Waitlisted", color: "bg-orange-100 text-orange-700" },

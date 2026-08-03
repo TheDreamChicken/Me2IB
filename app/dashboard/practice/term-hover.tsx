@@ -72,6 +72,7 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
   const popRef = useRef<HTMLDivElement>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const modeSwitchPinned = useRef(false);
   const [pos, setPos] = useState<{
     top?: number;
     bottom?: number;
@@ -94,6 +95,7 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
     // can't fight the animate-fade-up keyframe, which animates transform.
     // maxH clamps the box inside the viewport: detailed mode can run taller
     // than the space between the trigger and the screen edge.
+    modeSwitchPinned.current = false;
     setPos(
       above
         ? { bottom: window.innerHeight - rect.top + 8, left, maxH: rect.top - 16 }
@@ -107,20 +109,26 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
 
   function scheduleOpen() {
     if (closeTimer.current) clearTimeout(closeTimer.current);
+    modeSwitchPinned.current = false;
     if (pos) return;
     openTimer.current = setTimeout(openNow, 300);
   }
 
   function scheduleClose() {
     if (openTimer.current) clearTimeout(openTimer.current);
+    // Switching a tall above-trigger definition to Simple can move the
+    // smaller box out from under the pointer. Keep it open until the pointer
+    // deliberately re-enters a trigger/popover (or the user dismisses it).
+    if (modeSwitchPinned.current) return;
+    if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => {
       setPos(null);
-      setOverride(null);
     }, 180);
   }
 
   function cancelClose() {
     if (closeTimer.current) clearTimeout(closeTimer.current);
+    modeSwitchPinned.current = false;
   }
 
   // Close when the page moves, but keep the popover open while the user
@@ -128,8 +136,8 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
   useEffect(() => {
     if (!pos) return;
     const close = () => {
+      modeSwitchPinned.current = false;
       setPos(null);
-      setOverride(null);
     };
     const onScroll = (event: Event) => {
       const target = event.target;
@@ -145,13 +153,26 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (
+        popRef.current?.contains(target) ||
+        triggerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      close();
+    };
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", close);
     window.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
     return () => {
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", close);
       window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
     };
   }, [pos]);
 
@@ -176,7 +197,6 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
           e.stopPropagation();
           if (pos) {
             setPos(null);
-            setOverride(null);
           } else {
             openNow();
           }
@@ -217,6 +237,11 @@ function TermHover({ term, children }: { term: KeyTerm; children: string }) {
                       // Belt-and-braces: a resize mid-toggle must never
                       // let a pending close win.
                       cancelClose();
+                      // When an above-trigger detailed box shrinks, its top
+                      // edge can leave the pointer outside. Pin this instance
+                      // open until the pointer reaches it again; outside click,
+                      // scroll, resize, and Escape still dismiss normally.
+                      modeSwitchPinned.current = true;
                       setOverride(d);
                     }}
                     className={cn(

@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import {
+  APPLICATION_OUTCOMES,
+  APPLICATION_PROGRESS_STAGES,
+} from "@/lib/constants";
 
 export type ActionResult = { error?: string; ok?: boolean };
 
@@ -12,6 +16,7 @@ function str(formData: FormData, key: string): string | null {
 
 function revalidate() {
   revalidatePath("/dashboard/applications");
+  revalidatePath("/dashboard/calendar");
   revalidatePath("/dashboard");
 }
 
@@ -26,6 +31,15 @@ export async function upsertApplication(
 
   const company = str(formData, "company");
   if (!company) return { error: "Company is required." };
+
+  const status = str(formData, "status") ?? "not_started";
+  if (!APPLICATION_PROGRESS_STAGES.some((stage) => stage.value === status)) {
+    return { error: "Choose a valid application progress stage." };
+  }
+  const outcome = str(formData, "outcome") ?? "waiting";
+  if (!APPLICATION_OUTCOMES.some((item) => item.value === outcome)) {
+    return { error: "Choose a valid application outcome." };
+  }
 
   const referralContactId = str(formData, "referral_contact_id");
   if (referralContactId) {
@@ -50,7 +64,8 @@ export async function upsertApplication(
     season: str(formData, "season"),
     hours_per_week: str(formData, "hours_per_week"),
     pay: str(formData, "pay"),
-    status: str(formData, "status") ?? "not_started",
+    status,
+    outcome,
     priority: str(formData, "priority") ?? "target",
     deadline: str(formData, "deadline"),
     date_applied: str(formData, "date_applied"),
@@ -114,10 +129,38 @@ export async function setApplicationStatus(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not logged in." };
+  if (!APPLICATION_PROGRESS_STAGES.some((stage) => stage.value === status)) {
+    return { error: "Choose a valid application progress stage." };
+  }
 
   const { error } = await supabase
     .from("applications")
     .update({ status })
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidate();
+  return { ok: true };
+}
+
+export async function setApplicationOutcome(
+  id: string,
+  outcome: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+  if (!APPLICATION_OUTCOMES.some((item) => item.value === outcome)) {
+    return { error: "Choose a valid application outcome." };
+  }
+
+  const { error } = await supabase
+    .from("applications")
+    .update({ outcome })
     .eq("id", id)
     .eq("user_id", user.id);
 

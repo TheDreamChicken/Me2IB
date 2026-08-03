@@ -20,7 +20,13 @@ import type {
   Contact,
   Profile,
 } from "@/lib/types";
-import { APPLICATION_STATUSES, EVENT_TYPES, labelFor } from "@/lib/constants";
+import {
+  APPLICATION_PROGRESS_STAGES,
+  EVENT_TYPES,
+  applicationOutcomeFor,
+  applicationProgressFor,
+  labelFor,
+} from "@/lib/constants";
 import { daysSinceTouch, followupDelta, isOverdue } from "@/lib/contact-utils";
 import { Badge, Button, Card, StatCard } from "@/components/ui";
 import { LocalDate, LocalTime } from "@/components/local-date";
@@ -51,10 +57,9 @@ const INTERVIEW_STATUSES = new Set([
   "online_assessment",
   "phone_screen",
   "first_round",
+  "interview_stage",
   "superday",
 ]);
-
-const CLOSED_STATUSES = new Set(["rejected", "withdrawn", "offer"]);
 
 type UpcomingItem = {
   app: Application;
@@ -180,10 +185,12 @@ export default async function DashboardOverviewPage() {
   /* ----- stats ----- */
   const activeContacts = contacts.filter((c) => c.status !== "archived");
   const activeApplications = applications.filter(
-    (a) => a.status !== "rejected" && a.status !== "withdrawn"
+    (a) => applicationOutcomeFor(a.outcome, a.status) === "waiting"
   );
-  const interviewCount = applications.filter((a) =>
-    INTERVIEW_STATUSES.has(a.status)
+  const interviewCount = applications.filter(
+    (a) =>
+      applicationOutcomeFor(a.outcome, a.status) === "waiting" &&
+      INTERVIEW_STATUSES.has(applicationProgressFor(a.status))
   ).length;
   const upcomingWeekCount = weekCountRes.count ?? 0;
 
@@ -194,7 +201,9 @@ export default async function DashboardOverviewPage() {
     .slice(0, 5);
 
   const upcoming: UpcomingItem[] = applications
-    .filter((a) => !CLOSED_STATUSES.has(a.status))
+    .filter(
+      (a) => applicationOutcomeFor(a.outcome, a.status) === "waiting"
+    )
     .flatMap((app) => {
       const candidates: { date: string; kind: "Deadline" | "Next step" }[] = [];
       if (app.deadline) candidates.push({ date: app.deadline, kind: "Deadline" });
@@ -238,7 +247,7 @@ export default async function DashboardOverviewPage() {
           <StatCard
             label="Interviews in progress"
             value={interviewCount}
-            sub="OA through superday"
+            sub="OA through final rounds"
             icon={<ClipboardList className="h-5 w-5" />}
           />
         </Link>
@@ -386,7 +395,10 @@ export default async function DashboardOverviewPage() {
                                 ? `Next step: ${item.app.next_step}`
                                 : item.kind}
                               {" · "}
-                              {labelFor(APPLICATION_STATUSES, item.app.status)}
+                              {labelFor(
+                                APPLICATION_PROGRESS_STAGES,
+                                applicationProgressFor(item.app.status)
+                              )}
                             </p>
                           </div>
                           <DueBadge dateStr={item.date} />

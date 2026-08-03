@@ -177,8 +177,10 @@ const DEADLINE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function OpportunityScanner({
   defaultIndustries,
+  defaultGraduationYear,
 }: {
   defaultIndustries: string[];
+  defaultGraduationYear: number | null;
 }) {
   const [industries, setIndustries] = useState<string[]>(() =>
     defaultIndustries.filter((v) => INDUSTRIES.some((i) => i.value === v))
@@ -188,6 +190,9 @@ function OpportunityScanner({
   const [city, setCity] = useState("");
   const [season, setSeason] = useState("");
   const [year, setYear] = useState("");
+  const [graduationYear, setGraduationYear] = useState(() =>
+    defaultGraduationYear ? String(defaultGraduationYear) : ""
+  );
   const [keywords, setKeywords] = useState("");
 
   const [scanning, startScan] = useTransition();
@@ -212,6 +217,22 @@ function OpportunityScanner({
     setSetup(null);
     setNotice(null);
     setAddError(null);
+
+    const graduationYearText = graduationYear.trim();
+    const graduationYearValue = graduationYearText
+      ? Number(graduationYearText)
+      : null;
+    if (
+      graduationYearText &&
+      (!/^\d{4}$/.test(graduationYearText) ||
+        graduationYearValue === null ||
+        graduationYearValue < 2020 ||
+        graduationYearValue > 2100)
+    ) {
+      setScanError("Enter a four-digit graduation year, or leave it blank.");
+      return;
+    }
+
     startScan(async () => {
       const location = [
         city.trim() && `City: ${city.trim()}`,
@@ -221,9 +242,13 @@ function OpportunityScanner({
         .filter(Boolean)
         .join("; ");
       const timeline = [season, year.trim()].filter(Boolean).join(" ");
+      const eligibilityFilter = graduationYearValue
+        ? `Applicant graduation year: ${graduationYearValue}. Treat eligibility as a hard filter: exclude any posting limited to graduation years that do not include ${graduationYearValue}. For requirements stated as first-year, sophomore, junior, or senior, check whether a student graduating in ${graduationYearValue} fits that standing during the target timeline and exclude incompatible roles. Prefer opportunities that explicitly include ${graduationYearValue}; if a posting states no graduation-year restriction, it may be included but its notes must say that eligibility was not stated and should be verified.`
+        : "";
       const searchKeywords = [
         keywords.trim(),
         timeline && `Target recruiting timeline: ${timeline}`,
+        eligibilityFilter,
       ]
         .filter(Boolean)
         .join(". ");
@@ -231,6 +256,7 @@ function OpportunityScanner({
         industries: industries.map((v) => labelFor(INDUSTRIES, v)),
         location: location || "No geographic preference",
         keywords: searchKeywords,
+        graduationYear: graduationYearValue,
       });
       if (res.setup) {
         setSetup(res.setup);
@@ -350,7 +376,7 @@ function OpportunityScanner({
         </Field>
       </div>
 
-      <div className="mt-3 grid items-end gap-2 sm:grid-cols-[10rem_8rem_minmax(0,1fr)_auto]">
+      <div className="mt-3 grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-[9rem_9rem_10rem_minmax(0,1fr)_auto]">
         <Field label="Season">
           <Select value={season} onChange={(e) => setSeason(e.target.value)}>
             <option value="">Any season</option>
@@ -360,7 +386,7 @@ function OpportunityScanner({
             <option value="Summer">Summer</option>
           </Select>
         </Field>
-        <Field label="Year">
+        <Field label="Opportunity year">
           <Input
             type="number"
             min={2020}
@@ -368,6 +394,16 @@ function OpportunityScanner({
             value={year}
             onChange={(e) => setYear(e.target.value)}
             placeholder="2027"
+          />
+        </Field>
+        <Field label="Your graduation year">
+          <Input
+            type="number"
+            min={2020}
+            max={2100}
+            value={graduationYear}
+            onChange={(e) => setGraduationYear(e.target.value)}
+            placeholder="2029"
           />
         </Field>
         <Field label="Keywords">
@@ -393,6 +429,11 @@ function OpportunityScanner({
           {results === null ? "Scan for latest" : "Refresh list"}
         </Button>
       </div>
+      <p className="mt-1.5 text-xs text-zinc-400">
+        Graduation year filters out roles that explicitly target a different
+        class. If a posting does not state eligibility, the scanner will flag
+        that for you to verify.
+      </p>
 
       {scanning && (
         <div className="mt-4 flex items-center gap-3 rounded-xl border border-brand-100 bg-white px-4 py-3 text-sm text-zinc-500">
@@ -867,9 +908,11 @@ function OpportunityCard({
 export function OpportunitiesView({
   opportunities,
   targetIndustries,
+  defaultGraduationYear,
 }: {
   opportunities: Opportunity[];
   targetIndustries: string[];
+  defaultGraduationYear: number | null;
 }) {
   const [statusFilter, setStatusFilter] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
@@ -905,7 +948,10 @@ export function OpportunitiesView({
           blurb="Fresh internships and programs scanned from the live web, matched to your industries."
           variant="card"
         >
-          <OpportunityScanner defaultIndustries={targetIndustries} />
+          <OpportunityScanner
+            defaultIndustries={targetIndustries}
+            defaultGraduationYear={defaultGraduationYear}
+          />
         </TierGate>
       </div>
       <HuntingSpots />

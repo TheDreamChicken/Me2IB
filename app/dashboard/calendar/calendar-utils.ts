@@ -1,7 +1,11 @@
 // Shared types + date helpers + rule-based suggestion engine for the calendar.
 
 import type { Application, CalendarEvent, Contact } from "@/lib/types";
-import { EVENT_TYPES, eventTypeInfo } from "@/lib/constants";
+import {
+  EVENT_TYPES,
+  applicationOutcomeFor,
+  eventTypeInfo,
+} from "@/lib/constants";
 import { daysSinceTouch, followupDelta, isOverdue } from "@/lib/contact-utils";
 
 /* ------------------------------------------------------------------ */
@@ -21,7 +25,14 @@ export type ContactLite = Pick<
 
 export type ApplicationLite = Pick<
   Application,
-  "id" | "company" | "position" | "status" | "deadline" | "next_step" | "next_step_date"
+  | "id"
+  | "company"
+  | "position"
+  | "status"
+  | "outcome"
+  | "deadline"
+  | "next_step"
+  | "next_step_date"
 >;
 
 export type Suggestion = {
@@ -139,6 +150,7 @@ const DEADLINE_IRRELEVANT_STATUSES = new Set([
   "online_assessment",
   "phone_screen",
   "first_round",
+  "interview_stage",
   "superday",
   "offer",
   "rejected",
@@ -177,6 +189,7 @@ export function buildSuggestions(
   applications
     .filter(
       (a) =>
+        applicationOutcomeFor(a.outcome, a.status) === "waiting" &&
         a.deadline !== null &&
         a.deadline >= today &&
         a.deadline <= horizon &&
@@ -202,7 +215,13 @@ export function buildSuggestions(
 
   // 3. Upcoming next steps saved on applications.
   applications
-    .filter((a) => a.next_step && a.next_step_date && a.next_step_date >= today)
+    .filter(
+      (a) =>
+        applicationOutcomeFor(a.outcome, a.status) === "waiting" &&
+        a.next_step &&
+        a.next_step_date &&
+        a.next_step_date >= today
+    )
     .sort((a, b) => (a.next_step_date! < b.next_step_date! ? -1 : 1))
     .forEach((a) => {
       out.push({
