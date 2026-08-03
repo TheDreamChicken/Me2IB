@@ -19,6 +19,7 @@ import { DOC_TYPES, INDUSTRIES, labelFor } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import { deleteDocument, saveDocument } from "@/lib/actions/documents";
 import { PreferenceDeleteButton as DeleteButton } from "@/app/dashboard/settings/delete-button";
+import { LocalDate } from "@/components/local-date";
 import { AiReviewSection } from "./ai-review-section";
 import {
   Badge,
@@ -54,13 +55,11 @@ function DocumentTypeIcon({
   return <File className={className} />;
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+const FULL_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
 
 /** `${uid}/${Date.now()}-name.pdf` -> `name.pdf` */
 function fileLabel(path: string) {
@@ -297,8 +296,10 @@ function DocumentDetail({
         <div className="min-w-0 flex-1">
           <h3 className="text-lg font-semibold text-brand-900">{doc.name}</h3>
           <p className="text-sm text-zinc-500">
-            Updated {formatDate(doc.updated_at)} · Added{" "}
-            {formatDate(doc.created_at)}
+            Updated{" "}
+            <LocalDate iso={doc.updated_at} options={FULL_DATE_OPTIONS} /> ·{" "}
+            Added{" "}
+            <LocalDate iso={doc.created_at} options={FULL_DATE_OPTIONS} />
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge>{labelFor(DOC_TYPES, doc.doc_type)}</Badge>
@@ -498,7 +499,8 @@ export function DocumentsView({ documents }: { documents: Document[] }) {
                       )}
                     </div>
                     <p className="mt-2 text-xs text-zinc-400">
-                      Updated {formatDate(d.updated_at)}
+                      Updated{" "}
+                      <LocalDate iso={d.updated_at} options={FULL_DATE_OPTIONS} />
                     </p>
                     {d.notes && (
                       <p className="mt-1 line-clamp-2 text-xs text-zinc-500">

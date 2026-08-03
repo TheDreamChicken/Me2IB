@@ -5,18 +5,17 @@ import { AlertTriangle, Check, RefreshCw, Sparkles } from "lucide-react";
 import type { Document } from "@/lib/types";
 import { callAI } from "@/lib/ai-client";
 import { TierGate } from "@/components/tier-gate";
+import { LocalDate } from "@/components/local-date";
 import { saveDocumentAiFeedback } from "@/lib/actions/documents";
 import { Button, Spinner } from "@/components/ui";
 
 type AiFeedback = NonNullable<Document["ai_feedback"]>;
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+const FULL_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
 
 /** AI document review (heat tier) — lives inside the detail modal. */
 export function AiReviewSection({ doc }: { doc: Document }) {
@@ -191,7 +190,8 @@ function ReviewPanel({ doc }: { doc: Document }) {
           )}
           {reviewedAt && (
             <p className="text-xs text-zinc-400">
-              Reviewed {formatDate(reviewedAt)}
+              Reviewed{" "}
+              <LocalDate iso={reviewedAt} options={FULL_DATE_OPTIONS} />
             </p>
           )}
         </div>
